@@ -1,8 +1,11 @@
 import argparse
-from datetime import datetime
-from pathlib import Path
+from dataclasses import asdict
+from datetime import datetime, timezone
+import hashlib
 import json
+from pathlib import Path
 
+from . import __version__
 from .analyzer import normalize_raw_hex
 from .match_output import print_matches
 from .medium_output import print_medium_info, print_reader_info
@@ -16,17 +19,46 @@ def _signature(item):
     return [item.reverse_bit_order, item.reverse_byte_order, item.first_bit, item.number_of_bits, item.output_format]
 
 
-def _remember(path, key, matches):
+def _remember(path, kind, tag, expected, expected_format, matches):
     file = Path(path)
-    data = json.loads(file.read_text(encoding="utf-8")) if file.exists() else {"media_types": {}}
-    media = data["media_types"].setdefault(key, [])
-    media.append([_signature(item) for item in matches])
-    common = {tuple(item) for item in media[0]}
-    for observation in media[1:]:
-        common &= {tuple(item) for item in observation}
+    data = json.loads(file.read_text(encoding="utf-8")) if file.exists() else {"schema": 1, "media_types": {}}
+    media = data["media_types"].setdefault(kind, {"observations": [], "common_rules": []})
+    fingerprint = hashlib.sha256(
+        f"{tag.tag_type}|{tag.id_hex}|{tag.id_bit_count}|{expected}|{expected_format}".encode("utf-8")
+    ).hexdigest()
+    observation = {"fingerprint_sha256": fingerprint, "rules": [_signature(item) for item in matches]}
+    media["observations"] = [item for item in media["observations"] if item.get("fingerprint_sha256") != fingerprint]
+    media["observations"].append(observation)
+    common = {tuple(item) for item in media["observations"][0]["rules"]}
+    for saved in media["observations"][1:]:
+        common &= {tuple(item) for item in saved["rules"]}
+    candidates = [item for item in matches if tuple(_signature(item)) in common]
+    media["common_rules"] = [_signature(item) for item in candidates]
     file.parent.mkdir(parents=True, exist_ok=True)
     file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    return len(media), [item for item in matches if tuple(_signature(item)) in common]
+    return len(media["observations"]), candidates
+
+
+def _save_result(path, info, tag, kind, expected, matches):
+    payload = {
+        "schema": 1,
+        "tool": {"name": "elatec-uid-tool", "version": __version__},
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "reader": asdict(info),
+        "card": {
+            "tag_type": tag.tag_type,
+            "definition": kind.definition,
+            "name": kind.name,
+            "raw_id_hex": tag.id_hex,
+            "raw_bit_count": tag.id_bit_count,
+        },
+        "expected": expected,
+        "matches": [item.to_dict() for item in matches],
+    }
+    file = Path(path)
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"\nVýsledek uložen: {file}")
 
 
 def command_capture(args):
@@ -38,9 +70,12 @@ def command_capture(args):
     kind = get_tag_type_info(tag.tag_type)
     print_medium_info(tag, kind)
     matches = print_matches(tag.id_hex, tag.id_bit_count, args.expected, args.expected_format, args.max_results, args.show_all_candidates)
+    _save_result(args.output, info, tag, kind, args.expected, matches)
     if args.sample_store and matches:
-        count, common = _remember(args.sample_store, kind.definition, matches)
+        count, common = _remember(args.sample_store, kind.definition, tag, args.expected, args.expected_format, matches)
         print(f"Vzorků typu {kind.definition}: {count}; společných pravidel: {len(common)}")
+        if len(common) == 1:
+            print("Společné pravidlo je jednoznačné.")
     return 0
 
 
