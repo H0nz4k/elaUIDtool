@@ -1,0 +1,23 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+results/
+build/
+dist/
+.vscode/
+.idea/
+.env
+*.bix
+*.abp
+*.log
+
+# Local ELATEC Developer Pack (proprietary, do not commit)
+/files520/
+/files520.zip
+
+# Local measurements and learned rules
+/data/

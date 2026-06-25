@@ -2,7 +2,7 @@
 
 Terminálový nástroj pro analýzu UID z čteček **ELATEC TWN4** a nalezení konfigurace AppBlasteru, která reprodukuje identifikátor uložený v existující databázi.
 
-Aktuální verze: **0.1.3**
+Aktuální verze: **0.2.0**
 
 ## Ověřený referenční případ
 
@@ -47,10 +47,22 @@ Director může zobrazovat port jako `USB (COM13)`. Jde o virtuální COM port. 
 
 ## Instalace
 
+Nejjednodušší způsob je spustit:
+
 ```text
-1. Spusť install_windows.bat
-2. Spusť run_interactive.bat
+elaUIDtool.bat
 ```
+
+Soubor při prvním spuštění vytvoří `.venv`, nainstaluje projekt a potom zobrazí menu:
+
+```text
+1. Tests - otestovat médium a vypsat jeho typ
+2. Interactive mode - hledání UID a pravidla pro AppBlaster
+3. Update reader - příprava PRS a vlastního firmware
+0. Konec
+```
+
+Starší pomocné BAT soubory zůstávají dostupné pro přímé spuštění jednotlivých funkcí.
 
 Ruční instalace:
 
@@ -67,6 +79,30 @@ Interaktivní režim:
 ```powershell
 .venv\Scripts\python -m elatec_uid_tool interactive
 ```
+
+Pokud je připojena právě jedna čtečka ELATEC, program ji podle USB identifikace vybere automaticky. Ruční výběr zobrazí pouze při více čtečkách nebo když zařízení nelze jednoznačně rozpoznat.
+
+Výchozí analýza zobrazí jen doporučené nastavení. Všechny číselně shodné alternativy lze vypsat parametrem:
+
+```powershell
+.venv\Scripts\python -m elatec_uid_tool interactive --show-all-candidates
+```
+
+Po úspěšné analýze se anonymizovaný vzorek uloží do lokálního souboru `data/samples.json`. Vzorky se seskupují podle `TagType`; program pak hledá pravidla, která platí pro všechny dosud naměřené karty stejného typu. Syrové UID ani DB číslo se do tohoto souboru neukládají, pouze SHA-256 otisk a kandidátní pravidla. Složka `data/` se neposílá na GitHub.
+
+Samostatný test média bez zadání DB kódu:
+
+```powershell
+.venv\Scripts\python -m elatec_uid_tool test-medium
+```
+
+Bezpečná příprava práce s lokálním Developer Packet:
+
+```powershell
+.venv\Scripts\python -m elatec_uid_tool update-reader --devpack files520
+```
+
+Adresář `files520/` je lokální a je uvedený v `.gitignore`; proprietární ELATEC soubory se tedy necommitují.
 
 Seznam portů:
 
@@ -116,7 +152,7 @@ Nebo:
 
 ## Verzování
 
-Projekt používá Semantic Versioning. Aktuální verze je `0.1.3`; vydané verze se označují anotovanými Git tagy ve tvaru `vMAJOR.MINOR.PATCH`.
+Projekt používá Semantic Versioning. Aktuální verze je `0.2.0`; vydané verze se označují anotovanými Git tagy ve tvaru `vMAJOR.MINOR.PATCH`.
 
 Každá významná změna se zapisuje do `CHANGELOG.md` pod sekci `Unreleased`. Podrobný postup vydání je v `docs/VERSIONING.md`.
 
