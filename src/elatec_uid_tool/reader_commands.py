@@ -10,14 +10,18 @@ from .tagtypes import get_tag_type_info
 def _read(client, info, wait, poll, size):
     client.set_tag_types(info.lf_supported_mask, info.hf_supported_mask)
     print(f"Přilož kartu. Čekám maximálně {wait:.1f} s.")
-    end = time.monotonic() + wait
-    while time.monotonic() < end:
-        tag = client.search_tag(max_id_bytes=size)
-        if tag is not None:
+    deadline = time.monotonic() + wait
+    try:
+        while time.monotonic() < deadline:
+            tag = client.search_tag(max_id_bytes=size)
+            if tag is not None:
+                return tag
+            time.sleep(poll)
+    finally:
+        try:
             client.set_rf_off()
-            return tag
-        time.sleep(poll)
-    client.set_rf_off()
+        except ElatecError:
+            pass
     raise ElatecError("Médium nebylo nalezeno.")
 
 
@@ -40,11 +44,11 @@ def command_test_medium(args):
 
 def _show(root):
     if not root.is_dir():
-        print(f"Složka nebyla nalezena: {root}")
+        print(f"Developer Pack nebyl nalezen: {root}")
         return 1
     images = find_prs_images(root)
     tools = find_programming_tools(root)
-    print(f"Složka: {root}")
+    print(f"Developer Pack: {root}")
     print(f"PRS image: {len(images)}")
     for item in images:
         print(f"  {item.path}")
@@ -55,10 +59,12 @@ def _show(root):
 
 
 def command_prepare_reader(args):
-    return _show(Path(args.devpack).expanduser().resolve())
+    result = _show(Path(args.devpack).expanduser().resolve())
+    print("Nic nebylo naprogramováno.")
+    return result
 
 
 def command_update_reader(args):
     print("UPDATE READER – PŘÍPRAVA")
-    print("Tato verze pouze kontroluje lokální soubory.")
+    print("Tato verze pouze kontroluje lokální Developer Pack. Nic nemění.")
     return _show(Path(args.devpack).expanduser().resolve())
