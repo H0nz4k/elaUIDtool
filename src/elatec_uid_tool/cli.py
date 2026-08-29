@@ -7,6 +7,7 @@ from . import __version__
 from .commands import (
     command_analyze,
     command_capture,
+    command_export_fw,
     command_interactive,
     command_prepare_reader,
     command_reader_info,
@@ -95,6 +96,32 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("update-reader")
     p.add_argument("--devpack", default="files520")
     p.set_defaults(func=command_update_reader)
+
+    p = sub.add_parser(
+        "export-fw",
+        help="Sestaví TWN4 .bix podle nalezené shody (DEC/HEX/Wiegand 3+5).",
+    )
+    p.add_argument("--raw", help="RAW UID hex (offline analýza)")
+    p.add_argument("--bits", type=int)
+    p.add_argument("--expected", help="Očekávaný DB kód")
+    p.add_argument(
+        "--expected-format",
+        choices=("auto", "decimal", "hexadecimal"),
+        default="auto",
+    )
+    p.add_argument("--from-json", help="JSON výsledek capture/analyze")
+    p.add_argument("--match-index", type=int, default=0, help="Index shody (0 = nejlepší)")
+    p.add_argument("--tag-type", type=lambda s: int(s, 0), help="např. 0x80 pro MIFARE")
+    p.add_argument(
+        "--channel",
+        choices=("cdc", "uart", "both"),
+        default="cdc",
+        help="USB CDC, COM1 UART, nebo obojí",
+    )
+    p.add_argument("--devpack", default="elafiles")
+    p.add_argument("--output-dir", default="FW_elatec/export/out")
+    p.add_argument("--max-results", type=int, default=50)
+    p.set_defaults(func=command_export_fw)
     return parser
 
 
@@ -105,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("\nUkončeno uživatelem.", file=sys.stderr)
         return 130
-    except (ElatecError, ValueError) as exc:
+    except (ElatecError, ValueError, RuntimeError, FileNotFoundError, OSError) as exc:
         print(f"\nCHYBA: {exc}", file=sys.stderr)
         return 2
 

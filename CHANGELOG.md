@@ -6,6 +6,20 @@ a verzování používá [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-29
+
+### Added
+
+- Export flashovatelného TWN4 firmware (`.bix`) ze shody: příkaz `export-fw` a GUI tlačítka **Vytvořit FW (CDC/UART)**.
+- Generování User App pro plain Decimal/Hexadecimal (bit window, reverse bit/byte) i strukturované encodingy.
+- Build proti DevPacku v `elafiles/` (xCx520 Multi CDC base image).
+- Modul `encodings.py` s atypickými převody z praxe a dokumentace:
+  - **Wiegand 3+5** (`facility×100000+card`) a varianta **bez vedoucích nul**
+  - **PAC digit-concat** (Thales/PAC FW `FIN_kraceni_kodu_PAC_ID_bez_0`)
+  - **H10301 / Wiegand 26** (skip parity → FC+card → 3+5 / concat / card)
+  - jen **card 16-bit** / **facility 8-bit**
+  - scale `×10000` a `×1000000`
+
 ## [0.2.1] - 2026-08-29
 
 ### Added

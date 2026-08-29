@@ -29,6 +29,7 @@ from elatec_uid_tool.protocol import (
     TagRead,
     enumerate_ports,
 )
+from elatec_uid_tool.fw_export import HostChannel, build_firmware
 from elatec_uid_tool.tagtypes import decode_supported_masks, get_tag_type_info
 
 
@@ -134,11 +135,7 @@ def reader_info_to_dict(info: ReaderInfo) -> dict[str, Any]:
 
 def match_to_display(match: MatchCandidate) -> dict[str, Any]:
     mode = "All Bits" if match.is_all_bits else "Some Bits"
-    length = (
-        "8 digits (facility×100000+card)"
-        if match.encoding == "wiegand_3_5"
-        else "Automatic"
-    )
+    length = "Automatic" if match.encoding == "plain" else "Custom FW"
     return {
         "rank_score": match.rank_score,
         "output_hex": match.output_hex,
@@ -150,11 +147,46 @@ def match_to_display(match: MatchCandidate) -> dict[str, Any]:
         "number_of_bits": match.number_of_bits,
         "output_format": match.output_format,
         "encoding": match.encoding,
+        "encoding_note": match.encoding_note,
         "facility_code": match.facility_code,
         "card_number": match.card_number,
+        "selected_bits": match.selected_bits,
+        "is_all_bits": match.is_all_bits,
         "length": length,
         "appblaster": match.appblaster_settings(),
     }
+
+
+def match_from_display(data: dict[str, Any]) -> MatchCandidate:
+    first = data.get("first_bit")
+    is_all = bool(data.get("is_all_bits", first is None))
+    return MatchCandidate(
+        rank_score=float(data.get("rank_score", 0)),
+        reverse_bit_order=bool(data["reverse_bit_order"]),
+        reverse_byte_order=bool(data["reverse_byte_order"]),
+        first_bit=0 if first is None else int(first),
+        number_of_bits=int(data["number_of_bits"]),
+        output_format=str(data["output_format"]),
+        output_decimal=str(data.get("output_decimal", "")),
+        output_hex=str(data.get("output_hex", "")),
+        selected_bits=str(data.get("selected_bits", "")),
+        is_all_bits=is_all,
+        encoding=data.get("encoding", "plain"),
+        facility_code=data.get("facility_code"),
+        card_number=data.get("card_number"),
+        encoding_note=data.get("encoding_note"),
+    )
+
+
+def export_firmware_bix(
+    match_data: dict[str, Any],
+    channel: HostChannel,
+    *,
+    tag_type: int | None = None,
+) -> Path:
+    match = match_from_display(match_data)
+    result = build_firmware(match, channel=channel, tag_type=tag_type)
+    return result.bix_path
 
 
 def run_offline_analysis(

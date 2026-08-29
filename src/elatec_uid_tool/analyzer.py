@@ -5,9 +5,31 @@ import math
 import re
 from typing import Literal
 
+from .encodings import (
+    Encoding,
+    StructuredHit,
+    encode_wiegand_3_5,
+    iter_h10301_hits,
+    iter_payload_8_16_hits,
+)
+
 
 ExpectedFormat = Literal["auto", "decimal", "hexadecimal"]
-Encoding = Literal["plain", "wiegand_3_5"]
+
+# Re-export for existing imports
+__all__ = [
+    "ExpectedFormat",
+    "Encoding",
+    "ExpectedValue",
+    "MatchCandidate",
+    "analyze_uid",
+    "encode_wiegand_3_5",
+    "normalize_raw_hex",
+    "parse_expected",
+    "raw_decimal",
+    "reverse_bit_order",
+    "reverse_byte_order",
+]
 
 
 @dataclass(frozen=True)
@@ -33,6 +55,7 @@ class MatchCandidate:
     encoding: Encoding = "plain"
     facility_code: int | None = None
     card_number: int | None = None
+    encoding_note: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -52,7 +75,21 @@ class MatchCandidate:
             "encoding": self.encoding,
             "length": "automatic",
         }
-        if self.encoding == "wiegand_3_5":
+        if self.encoding_note:
+            settings["note"] = self.encoding_note
+        if self.encoding != "plain":
+            settings["length"] = "custom_firmware"
+            settings["facility_card"] = {
+                "facility_code": self.facility_code,
+                "card_number": self.card_number,
+                "display": self.output_decimal,
+                "note": self.encoding_note
+                or (
+                    "Standardní AppBlaster Decimal nestačí – "
+                    "použijte Vytvořit FW / export-fw."
+                ),
+            }
+        if self.encoding in ("wiegand_3_5", "h10301_3_5"):
             settings["length"] = "wiegand_3_5_fixed_8"
             settings["wiegand_3_5"] = {
                 "facility_code": self.facility_code,
@@ -136,16 +173,6 @@ def reverse_byte_order(bits: str) -> str:
     return "".join(reversed(chunks))
 
 
-def encode_wiegand_3_5(value_bits_numeric: int) -> tuple[int, int, int, str]:
-    """facility (8 bit) + card (16 bit) → 8místný desítkový kód FFFCCCCC."""
-    value_24 = value_bits_numeric & 0xFFFFFF
-    facility = (value_24 >> 16) & 0xFF
-    card = value_24 & 0xFFFF
-    encoded = facility * 100_000 + card
-    display = f"{facility:03d}{card:05d}"
-    return facility, card, encoded, display
-
-
 def _transform_bits(
     original_bits: str,
     reverse_bits: bool,
@@ -196,6 +223,7 @@ def _candidate_score(
         34: 50.0,
         35: 48.0,
         37: 46.0,
+        8: 40.0,
     }
     score += preferred.get(number_of_bits, min(number_of_bits, 64) * 0.25)
 
@@ -204,20 +232,114 @@ def _candidate_score(
     if automatic_text_match:
         score += 30.0
 
-    if encoding == "wiegand_3_5":
-        # Preferuj přesně 24bitové okno (facility+card) a bajtový offset.
-        score += 90.0
+    encoding_bonus = {
+        "plain": 0.0,
+        "wiegand_3_5": 190.0,
+        "wiegand_3_5_strip": 150.0,
+        "facility_card_concat": 170.0,
+        "h10301_3_5": 200.0,
+        "h10301_concat": 185.0,
+        "h10301_card": 160.0,
+        "h10301_strip": 155.0,
+        "card_16": 110.0,
+        "facility_8": 40.0,
+        "scale_4": 100.0,
+        "scale_6": 100.0,
+    }
+    score += encoding_bonus.get(encoding, 50.0)
+
+    if encoding in (
+        "wiegand_3_5",
+        "wiegand_3_5_strip",
+        "facility_card_concat",
+        "scale_4",
+        "scale_6",
+        "card_16",
+        "facility_8",
+    ):
         if number_of_bits == 24:
             score += 100.0
         elif number_of_bits > 24:
-            # Delší okna fungují jen díky masce 0xFFFFFF – jsou méně přesná.
             score -= 40.0 + (number_of_bits - 24) * 2.0
         if first_bit % 8 == 0:
             score += 25.0
 
+    if encoding.startswith("h10301") and number_of_bits == 26:
+        score += 120.0
+
     # Při shodném výsledku preferujeme menší offset.
     score -= first_bit * 0.02
     return score
+
+
+def _hit_matches_expected(hit: StructuredHit, expected: ExpectedValue) -> bool:
+    if expected.format != "decimal":
+        return False
+    if hit.encoded == expected.numeric_value:
+        return True
+    # Přesná textová shoda včetně vedoucích nul (08607342 vs 8607342).
+    original = expected.original.strip()
+    return hit.display == original or hit.display.lstrip("0") == original.lstrip("0")
+
+
+def _append_structured(
+    candidates: list[MatchCandidate],
+    seen: set[tuple],
+    *,
+    hit: StructuredHit,
+    rev_bits: bool,
+    rev_bytes: bool,
+    first_bit: int,
+    number_of_bits: int,
+    source_len: int,
+    selected: str,
+    hex_text: str,
+    is_all: bool,
+    expected: ExpectedValue,
+) -> None:
+    if not _hit_matches_expected(hit, expected):
+        return
+    automatic_text_match = (
+        hit.display == expected.original.strip()
+        or str(hit.encoded) == expected.normalized_text
+    )
+    key = (
+        rev_bits,
+        rev_bytes,
+        first_bit,
+        number_of_bits,
+        hit.output_format,
+        hit.encoding,
+    )
+    if key in seen:
+        return
+    seen.add(key)
+    candidates.append(
+        MatchCandidate(
+            rank_score=_candidate_score(
+                reverse_bits=rev_bits,
+                reverse_bytes=rev_bytes,
+                first_bit=first_bit,
+                number_of_bits=number_of_bits,
+                source_bit_count=source_len,
+                automatic_text_match=automatic_text_match,
+                encoding=hit.encoding,
+            ),
+            reverse_bit_order=rev_bits,
+            reverse_byte_order=rev_bytes,
+            first_bit=first_bit,
+            number_of_bits=number_of_bits,
+            output_format=hit.output_format,
+            output_decimal=hit.display,
+            output_hex=hex_text,
+            selected_bits=selected,
+            is_all_bits=is_all,
+            encoding=hit.encoding,
+            facility_code=hit.facility_code,
+            card_number=hit.card_number,
+            encoding_note=hit.note,
+        )
+    )
 
 
 def analyze_uid(
@@ -301,50 +423,41 @@ def analyze_uid(
                             )
                         )
 
-                # ── Wiegand 3+5 (FFFCCCCC) ──────────────────────────────────
-                # facility (8 bit) × 100000 + card (16 bit), typicky z 24bit okna
+                # ── strukturované převody z 24bit+ payloadu ─────────────────
                 if expected.format == "decimal" and number_of_bits >= 24:
-                    facility, card, encoded, display = encode_wiegand_3_5(numeric)
-                    if encoded == expected.numeric_value:
-                        automatic_text_match = (
-                            display == expected.original.strip()
-                            or str(encoded) == expected.normalized_text
+                    for hit in iter_payload_8_16_hits(numeric):
+                        _append_structured(
+                            candidates,
+                            seen,
+                            hit=hit,
+                            rev_bits=rev_bits,
+                            rev_bytes=rev_bytes,
+                            first_bit=first_bit,
+                            number_of_bits=number_of_bits,
+                            source_len=source_len,
+                            selected=selected,
+                            hex_text=hex_text,
+                            is_all=is_all,
+                            expected=expected,
                         )
-                        key = (
-                            rev_bits,
-                            rev_bytes,
-                            first_bit,
-                            number_of_bits,
-                            "Decimal",
-                            "wiegand_3_5",
+
+                # ── H10301 / Wiegand 26 (PAC iCLASS layout) ────────────────
+                if expected.format == "decimal" and number_of_bits == 26:
+                    for hit in iter_h10301_hits(selected):
+                        _append_structured(
+                            candidates,
+                            seen,
+                            hit=hit,
+                            rev_bits=rev_bits,
+                            rev_bytes=rev_bytes,
+                            first_bit=first_bit,
+                            number_of_bits=number_of_bits,
+                            source_len=source_len,
+                            selected=selected,
+                            hex_text=hex_text,
+                            is_all=is_all,
+                            expected=expected,
                         )
-                        if key not in seen:
-                            seen.add(key)
-                            candidates.append(
-                                MatchCandidate(
-                                    rank_score=_candidate_score(
-                                        reverse_bits=rev_bits,
-                                        reverse_bytes=rev_bytes,
-                                        first_bit=first_bit,
-                                        number_of_bits=number_of_bits,
-                                        source_bit_count=source_len,
-                                        automatic_text_match=automatic_text_match,
-                                        encoding="wiegand_3_5",
-                                    ),
-                                    reverse_bit_order=rev_bits,
-                                    reverse_byte_order=rev_bytes,
-                                    first_bit=first_bit,
-                                    number_of_bits=number_of_bits,
-                                    output_format="Decimal (Wiegand 3+5)",
-                                    output_decimal=display,
-                                    output_hex=hex_text,
-                                    selected_bits=selected,
-                                    is_all_bits=is_all,
-                                    encoding="wiegand_3_5",
-                                    facility_code=facility,
-                                    card_number=card,
-                                )
-                            )
 
     candidates.sort(
         key=lambda item: (

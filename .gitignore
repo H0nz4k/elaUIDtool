@@ -14,10 +14,22 @@ dist/
 *.bix
 *.abp
 *.log
+*.elf
+*.hex
+*.lst
+*.map
+*.zip
 
 # Local ELATEC Developer Pack (proprietary, do not commit)
 /files520/
 /files520.zip
+/elafiles/
+
+# Generated firmware export artifacts
+/FW_elatec/export/out/
+/FW_elatec/export/out_test/
+/FW_elatec/**/out/
+/FW_elatec/**/FIN_kraceni_kodu_PAC_ID_bez_0/FIN_kraceni_kodu_PAC_ID_bez_0/
 
 # Local measurements and learned rules
 /data/

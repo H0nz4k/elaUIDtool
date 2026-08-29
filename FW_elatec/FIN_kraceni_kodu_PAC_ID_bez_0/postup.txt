@@ -1,0 +1,11 @@
+
+C:\Users\Surface>cd Desktop
+
+C:\Users\Surface\Desktop>cd Vystup
+
+C:\Users\Surface\Desktop\Vystup>"C:\Users\Surface\Desktop\elatec\TWN4DevPack480\TWN4DevPack480\Tools\Yagarto-20110328\bin\arm-none-eabi-gcc.exe" -std=c99 -mcpu=cortex-m0 -Os -ffunction-sections -gdwarf-2 -mthumb -fomit-frame-pointer -Wall -Wstrict-prototypes -fverbose-asm -Wa,-ahlms="App_DELI310_new.lst" -DAPPCHARS=DELI -DVERSION=0x310 -DAPPEXTCONFIG=1  -I. -I"C:\Users\Surface\Desktop\elatec\TWN4DevPack480\TWN4DevPack480\Tools\sys" "C:\Users\Surface\Desktop\elatec\TWN4DevPack480\TWN4DevPack480\Tools\sys\twn4.crt.c" "App_STD204_Standard_temp.c" "appconfig.c" -nostartfiles -T"C:\Users\Surface\Desktop\elatec\TWN4DevPack480\TWN4DevPack480\Tools\sys\app.ld" -Wl,--gc-sections,-e,AppHeader,--no-print-gc-sections,-Map="App_DELI310_new.map",--cref,--no-warn-mismatch "C:\Users\Surface\Desktop\elatec\TWN4DevPack480\TWN4DevPack480\Tools\sys\libapp.a" -lc -o "App_pok310_new.elf"
+
+C:\Users\Surface\Desktop\Vystup>"C:\Users\Surface\Desktop\elatec\TWN4DevPack480\TWN4DevPack480\Tools\Yagarto-20110328\bin\arm-none-eabi-objcopy.exe" -O ihex "App_pok310_new.elf" "App_pok310_new.hex"
+
+
+C:\Users\Surface\Desktop\Vystup>"C:\Users\Surface\Desktop\elatec\TWN4DevPack480\TWN4DevPack480\Tools\makeapp.exe" -v4 -tTWN4 -nTWN4   "-iTWN4_CCx480.bix" "-iTWN4_MCx480.bix" "-iTWN4_NCx480.bix" "-hApp_pok310_new.hex" "-oTWN4_xCx480_pok310_hex2dec2.bix"

@@ -5,6 +5,11 @@ from elatec_uid_tool.analyzer import (
     reverse_bit_order,
     reverse_byte_order,
 )
+from elatec_uid_tool.encodings import (
+    encode_facility_card_concat,
+    encode_wiegand_3_5,
+    parse_h10301,
+)
 
 
 class AnalyzerTests(unittest.TestCase):
@@ -56,6 +61,43 @@ class AnalyzerTests(unittest.TestCase):
         self.assertEqual(matches[0].output_decimal, "01345801")
         self.assertEqual(matches[0].facility_code, 13)
         self.assertEqual(matches[0].card_number, 45801)
+
+    def test_pac_digit_concat(self):
+        enc, disp = encode_facility_card_concat(86, 7342)
+        self.assertEqual(enc, 867342)
+        self.assertEqual(disp, "867342")
+        _, matches = analyze_uid("AE1C56CF", 32, "867342", "decimal", 30)
+        concats = [m for m in matches if m.encoding == "facility_card_concat"]
+        self.assertTrue(concats)
+        self.assertEqual(concats[0].facility_code, 86)
+        self.assertEqual(concats[0].card_number, 7342)
+
+    def test_wiegand_strip_leading_zeros(self):
+        _, matches = analyze_uid("AE1C56CF", 32, "8607342", "decimal", 30)
+        stripped = [m for m in matches if m.encoding == "wiegand_3_5_strip"]
+        self.assertTrue(stripped)
+        self.assertEqual(stripped[0].output_decimal, "8607342")
+
+    def test_card_16_only(self):
+        _, matches = analyze_uid("AE1C56CF", 32, "7342", "decimal", 30)
+        cards = [m for m in matches if m.encoding == "card_16"]
+        self.assertTrue(cards)
+        self.assertEqual(cards[0].card_number, 7342)
+
+    def test_h10301_layout(self):
+        facility, card, _, disp = encode_wiegand_3_5((86 << 16) | 7342)
+        self.assertEqual(disp, "08607342")
+        payload = f"0{facility:08b}{card:016b}0"
+        self.assertEqual(len(payload), 26)
+        parsed = parse_h10301(payload)
+        self.assertEqual(parsed, (86, 7342))
+        padded = payload + "000000"
+        raw_hex = f"{int(padded, 2):08X}"
+        _, matches = analyze_uid(raw_hex, 32, "08607342", "decimal", 40)
+        h10301 = [m for m in matches if m.encoding == "h10301_3_5"]
+        self.assertTrue(h10301)
+        self.assertEqual(h10301[0].facility_code, 86)
+        self.assertEqual(h10301[0].card_number, 7342)
 
 
 if __name__ == "__main__":

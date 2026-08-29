@@ -24,6 +24,7 @@ from services import (  # noqa: E402
     capture_and_analyze,
     capture_result_to_dict,
     explain_port_error,
+    export_firmware_bix,
     list_ports,
     read_reader_info,
     reader_info_to_dict,
@@ -134,8 +135,8 @@ async def refresh_ports(sel: ui.select) -> None:
 
 # ── Sdílené UI komponenty ─────────────────────────────────────────────────────
 
-def best_match_card(m: dict) -> None:
-    """Karta nejlepší shody – zobrazuje se inline."""
+def best_match_card(m: dict, *, tag_type: int | None = None) -> None:
+    """Karta nejlepší shody – zobrazuje se inline + nabídka sestavení FW."""
     with ui.card().classes(f"{CARD} border-primary/30 bg-blue-50"):
         with ui.row().classes("items-center gap-2 mb-2"):
             ui.icon("check_circle", size="xs").classes("text-positive")
@@ -143,6 +144,8 @@ def best_match_card(m: dict) -> None:
             ui.badge(f"skóre {m['rank_score']:.1f}", color="primary")
             if m.get("encoding") == "wiegand_3_5":
                 ui.badge("Wiegand 3+5", color="secondary")
+            elif m.get("encoding") and m.get("encoding") != "plain":
+                ui.badge(str(m["encoding"]), color="secondary")
         pairs = [
             ("Selected HEX",   m["output_hex"]),
             ("Selected DEC",   m["output_decimal"]),
@@ -159,12 +162,60 @@ def best_match_card(m: dict) -> None:
                 ("Card No.", m.get("card_number")),
                 ("Length",   m.get("length", "8 digits")),
             ])
-        kv_grid([(k, str(v)) for k, v in pairs])
-        if m.get("encoding") == "wiegand_3_5":
+        elif m.get("encoding") and m.get("encoding") != "plain":
+            pairs.extend([
+                ("Encoding", m.get("encoding")),
+                ("Facility", m.get("facility_code")),
+                ("Card No.", m.get("card_number")),
+            ])
+            if m.get("encoding_note"):
+                pairs.append(("Poznámka", m["encoding_note"]))
+        kv_grid([(k, str(v)) for k, v in pairs if v is not None])
+        if m.get("encoding") and m.get("encoding") != "plain":
             ui.label(
                 "Poznámka: standardní AppBlaster Decimal nestačí – "
-                "je potřeba vlastní formátování facility×100000+card."
+                "použijte Vytvořit FW níže."
             ).classes("text-caption text-grey-7 mt-2")
+
+        ui.separator().classes("my-3")
+        ui.label("Firmware pro čtečku").classes(SEC)
+        ui.label(
+            "Sestaví flashovatelný .bix se stejným pravidlem "
+            "(bit/byte reverse, HEX/DEC, Wiegand 3+5). Vyžaduje DevPack v elafiles/."
+        ).classes("text-caption text-grey-7 mb-2")
+
+        async def make_fw(channel: str, match=m, tt=tag_type) -> None:
+            try:
+                path = await run_io(
+                    export_firmware_bix, match, channel, tag_type=tt
+                )
+                notify_ok(f"FW hotovo ({channel.upper()}): {path.name}")
+                log_add(f"BIX → {path}")
+            except Exception as exc:
+                notify_err(str(exc))
+
+        with ui.row().classes("gap-2 flex-wrap"):
+            ui.button(
+                "Vytvořit FW (CDC)",
+                icon="usb",
+                on_click=lambda: make_fw("cdc"),
+            ).props("color=primary")
+            ui.button(
+                "Vytvořit FW (UART)",
+                icon="cable",
+                on_click=lambda: make_fw("uart"),
+            ).props("outline color=primary")
+
+
+def parse_tag_type(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    return int(text, 0)
 
 
 def _candidates_rows(matches: list[dict]) -> list[dict]:
@@ -370,7 +421,10 @@ def build_capture_tab() -> None:
                     ])
 
                 if matches:
-                    best_match_card(matches[0])
+                    best_match_card(
+                        matches[0],
+                        tag_type=parse_tag_type(d["card"].get("tag_type")),
+                    )
 
                     with ui.row().classes("gap-2 flex-wrap"):
                         if len(matches) > 1:

@@ -1,0 +1,7 @@
+# Ignoruj sestavené artefakty User App
+out/
+*.elf
+*.hex
+*.map
+*.lst
+*.o

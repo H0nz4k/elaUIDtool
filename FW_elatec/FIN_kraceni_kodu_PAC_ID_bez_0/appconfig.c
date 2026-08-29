@@ -1,0 +1,158 @@
+// *******************************************************************
+// **                                                               **
+// ** File: appconfig.c                                             **
+// ** Date: 15.05.2024                                              **
+// ** Time: 11:47                                                   **
+// **                                                               **
+// ** This file was generated as part of a project by:              **
+// ** AppBlaster V4.80                                              **
+// **                                                               **
+// *******************************************************************
+
+#include "twn4.sys.h"
+#include "apptools.h"
+#include "appconfig.h"
+
+// *******************************************************************
+// ****** Global Variables *******************************************
+// *******************************************************************
+
+// ------ Options --------------------------------
+
+const byte AppManifest[] =
+{
+    USB_KEYBOARDREPEATRATE, 1, 10,
+    USB_KEYBOARDLAYOUT, 1, USB_KEYBOARDLAYOUT_ENGLISH,
+    USB_KEYBOARDSENDALTCODES, 1, USB_KEYBOARDSENDALTCODES_OFF,
+    USB_SERIALNUMBER, 1, USB_SERIALNUMBER_OFF,
+    USB_SUPPORTREMOTEWAKEUP, 1, USB_SUPPORTREMOTEWAKEUP_OFF,
+    EXECUTE_APP, 1, EXECUTE_APP_AUTO,
+    ENABLE_WATCHDOG, 1, WATCHDOG_ON,
+    TLV_END
+};
+
+// ------ Transponder-Specific Variables ---------
+
+// *******************************************************************
+// ****** HID iCLASS/SEOS (PAC, 26 bits) *****************************
+// *******************************************************************
+int GetBit(const byte *bits, int bitIndex) {
+    int byteIndex = bitIndex / 8;
+    int bitInByte = 7 - (bitIndex % 8); // MSB first
+    return (bits[byteIndex] >> bitInByte) & 1;
+}
+
+bool ReadType1(int TagType, const byte *ID, int IDBitCnt, char *CardString, int MaxCardStringLen)
+{
+    if (TagType != HFTAG_HIDICLASS)
+        return false;
+
+    byte PACBits[32];
+    int PACBitCnt;
+
+    if (!ICLASS_GetPACBits(PACBits, &PACBitCnt, sizeof(PACBits)))
+        return false;
+
+    if (PACBitCnt < 26)
+        return false;
+
+    unsigned int FC = 0;
+    for (int i = 1; i <= 8; i++) {
+        FC = (FC << 1) | GetBit(PACBits, i);
+    }
+
+    unsigned int IDval = 0;
+    for (int i = 9; i <= 24; i++) {
+        IDval = (IDval << 1) | GetBit(PACBits, i);
+    }
+
+    // Složit FC + ID podle délky ID
+    unsigned int FullCode = FC;
+    unsigned int tempID = IDval;
+    while (tempID >= 1) {
+        FullCode *= 10;
+        tempID /= 10;
+    }
+    FullCode += IDval;
+
+    snprintf(CardString, MaxCardStringLen, "%u", FullCode);
+
+    // Debug
+    //char debug[64];
+    //snprintf(debug, sizeof(debug), ">DEBUG: FC=%u, ID=%u, Full=%u\n", FC, IDval, FullCode);
+    //HostWriteString(debug);
+
+    return true;
+}
+
+
+
+// *******************************************************************
+// ****** Transponder Evaluation Function ****************************
+// *******************************************************************
+
+bool ReadCardData(int TagType,const byte *ID,int IDBitCnt,char *CardString,int MaxCardStringLen)
+{
+    if (ReadType1(TagType,ID,IDBitCnt,CardString,MaxCardStringLen))
+        return true;
+    return false;
+}
+
+// *******************************************************************
+// ****** Event Handler **********************************************
+// *******************************************************************
+
+void OnStartup(void)
+{
+    CompLEDInit(REDLED | YELLOWLED | GREENLED);
+    CompLEDOff(REDLED);
+    CompLEDOff(YELLOWLED);
+    CompLEDOn(GREENLED);
+    SetVolume(30);
+    BeepLow();
+    BeepHigh();
+    SetTagTypes(LFTAGTYPES, HFTAGTYPES);
+}
+
+void OnNewCardFound(const char *CardString)
+{
+    // Zkopírujme si původní číslo
+    unsigned int decValue = 0;
+    for (int i = 0; CardString[i] >= '0' && CardString[i] <= '9'; i++) {
+        decValue = decValue * 10 + (CardString[i] - '0');
+    }
+
+    // HEX přepočet
+    char hexStr[12];
+    snprintf(hexStr, sizeof(hexStr), "%X", decValue);
+
+    // Výstup: >20,<DEC>,<HEX>
+    HostWriteString(">20,");
+    HostWriteString(CardString);
+    HostWriteString(",");
+    HostWriteString(hexStr);
+    HostWriteString("\n");
+
+    // Volitelné: zvuk a LED
+    CompLEDOn(REDLED);
+    CompLEDBlink(REDLED,500,500);
+    CompLEDOff(YELLOWLED);
+    CompLEDOff(GREENLED);
+    SetVolume(100);
+    BeepHigh();
+}
+
+void OnCardTimeout(const char *CardString)
+{
+    CompLEDOff(REDLED);
+    CompLEDOff(YELLOWLED);
+    CompLEDOn(GREENLED);
+}
+
+void OnCardFound(const char *CardString)
+{
+}
+
+void OnCardDone(void)
+{
+}

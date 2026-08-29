@@ -1,20 +1,19 @@
 # ELATEC – kód identifikace
 
-Terminálový nástroj pro analýzu UID z čteček **ELATEC TWN4** a nalezení konfigurace AppBlasteru, která reprodukuje identifikátor uložený v existující databázi.
+Terminálový a desktopový nástroj pro analýzu UID z čteček **ELATEC TWN4** a nalezení konfigurace AppBlasteru (nebo vlastního firmware), která reprodukuje identifikátor uložený v existující databázi.
 
-Aktuální verze: **0.2.1**
+Aktuální verze: **0.3.0**  
+Repozitář: [https://github.com/H0nz4k/elaUIDtool](https://github.com/H0nz4k/elaUIDtool)
 
 ## Ověřené referenční případy
 
-### EM4102 (LF)
+### EM4102 (LF) – plain Decimal
 
 ```text
 RAW UID:          3D00C000D4
 RAW délka:        40 bitů
 DB identifikátor: 12583124
 ```
-
-Nalezené a fyzicky ověřené nastavení AppBlasteru:
 
 ```text
 Output Bits:        Some Bits
@@ -24,6 +23,7 @@ Output Format:      Decimal
 Length:             Automatic
 Reverse Bit Order:  No
 Reverse Byte Order: No
+Encoding:           plain
 ```
 
 ### MIFARE (HF) – Wiegand 3+5
@@ -37,41 +37,68 @@ RAW UID:          E9B20DFF  →  DB 01345801
 Reverse Byte Order: Yes
 First Bit:          8
 Number of Bits:     24
-Encoding:           Wiegand 3+5  (facility×100000 + card → FFFCCCCC)
+Encoding:           wiegand_3_5  (facility×100000 + card → FFFCCCCC)
 ```
+
+### HID iCLASS / PAC (historický FW)
+
+V `FW_elatec/FIN_kraceni_kodu_PAC_ID_bez_0/` je ověřený User App pro Thales/PAC:
+
+- čtení PAC bitů přes `ICLASS_GetPACBits` (H10301 26 bit),
+- FC = bity 1–8, card = bity 9–24 (bit 0 a 25 = parita),
+- výstup jako `%03u%05u`, `facility×100000+card`, nebo **digit-concat** + strip vedoucích nul.
+
+Tyto převody jsou dnes součástí analyzátoru (`facility_card_concat`, `h10301_*`, `wiegand_3_5_strip`).
 
 ## Funkce
 
-- komunikace s TWN4 přes Simple Protocol v ASCII režimu,
-- zjištění verze firmware a typu zařízení,
-- zjištění LF/HF technologií podporovaných konkrétní čtečkou,
-- načtení `TagType`, počtu bitů a raw UID,
-- základní identifikace média a frekvenční skupiny,
-- hledání bitového výřezu a změn bit/byte order,
-- hledání kódování **Wiegand 3+5** (8místný desítkový kód),
-- doporučení konkrétního nastavení AppBlasteru,
-- export výsledků do JSON,
-- offline analýza bez připojené čtečky,
+- komunikace s TWN4 přes Simple Protocol (ASCII),
+- verze firmware, typ zařízení, LF/HF masky,
+- načtení `TagType`, bitové délky a RAW UID,
+- hledání bitového okna + reverse bit/byte order,
+- strukturované encodingy (Wiegand / PAC / H10301 / …),
+- doporučení nastavení AppBlasteru,
+- export JSON výsledků,
+- sestavení flashovatelného `.bix` (`export-fw`, GUI **Vytvořit FW**),
+- offline analýza bez čtečky,
 - desktopové GUI (`gui/run_gui.bat`).
+
+## Podporované encodingy
+
+| Encoding | Popis | Typický výstup |
+|----------|--------|----------------|
+| `plain` | prostý Decimal / Hexadecimal z bitového okna | `12583124` |
+| `wiegand_3_5` | facility (8) × 100000 + card (16) | `08607342` |
+| `wiegand_3_5_strip` | totéž bez vedoucích nul | `8607342` |
+| `facility_card_concat` | PAC digit-concat (FC a card slepeny desítkově) | `867342` |
+| `card_16` | jen spodních 16 bitů (card) | `7342` |
+| `facility_8` | jen horních 8 bitů (facility) | `86` |
+| `scale_4` / `scale_6` | facility × 10⁴ / 10⁶ + card | — |
+| `h10301_3_5` | 26bit H10301 → Wiegand 3+5 | `08607342` |
+| `h10301_concat` | 26bit H10301 → PAC digit-concat | `867342` |
+| `h10301_card` | 26bit H10301 → jen card | `7342` |
+| `h10301_strip` | H10301 → 3+5 bez vedoucích nul | `8607342` |
+
+Analyzátor zkouší i kombinace **Reverse Bit Order** / **Reverse Byte Order** a všechny rozumné bitové výřezy. U strukturovaných encodingů standardní AppBlaster Decimal nestačí — použijte **export-fw** / **Vytvořit FW**.
+
+Zatím neimplementováno (při potřebě doplníme podle konkrétního RAW+DB páru): H10306 34-bit, H10304 37-bit, Corporate 1000, proprietární Lenel/SH layouty, živé `ICLASS_GetPACBits` přes Simple Protocol.
 
 ## Požadavky
 
 - Windows 10/11,
-- Python 3.10 nebo novější,
-- ELATEC TWN4 s firmware `PRS` pro Simple Protocol,
-- `pyserial` – nainstaluje se automaticky.
+- Python 3.10+,
+- ELATEC TWN4 s firmware **PRS** (Simple Protocol) pro čtení karet,
+- pro sestavení `.bix`: lokální DevPack ve složce `elafiles/` (nebo dříve `files520/`).
 
-Director může zobrazovat port jako `USB (COM13)`. Jde o virtuální COM port. Před spuštěním tohoto programu musí být Director odpojený nebo zavřený, protože COM port může v jednu chvíli používat jen jedna aplikace.
+Director může držet COM port (`USB (COMxx)`). Před spuštěním toolu Director odpojte / zavřete.
 
 ## Instalace
-
-Nejjednodušší způsob je spustit:
 
 ```text
 elaUIDtool.bat
 ```
 
-Soubor při prvním spuštění vytvoří `.venv`, nainstaluje projekt a potom zobrazí menu:
+Při prvním spuštění vytvoří `.venv`, nainstaluje projekt a nabídne menu:
 
 ```text
 1. Tests - otestovat médium a vypsat jeho typ
@@ -79,8 +106,6 @@ Soubor při prvním spuštění vytvoří `.venv`, nainstaluje projekt a potom z
 3. Update reader - příprava PRS a vlastního firmware
 0. Konec
 ```
-
-Starší pomocné BAT soubory zůstávají dostupné pro přímé spuštění jednotlivých funkcí.
 
 Ruční instalace:
 
@@ -90,60 +115,99 @@ py -m venv .venv
 .venv\Scripts\python -m pip install -e .
 ```
 
+GUI závislosti:
+
+```powershell
+.venv\Scripts\python -m pip install -r gui\requirements.txt
+```
+
 ## Použití
 
-Interaktivní režim:
+### Interaktivní režim / capture / analyze
 
 ```powershell
 .venv\Scripts\python -m elatec_uid_tool interactive
-```
-
-Pokud je připojena právě jedna čtečka ELATEC, program ji podle USB identifikace vybere automaticky. Ruční výběr zobrazí pouze při více čtečkách nebo když zařízení nelze jednoznačně rozpoznat.
-
-Výchozí analýza zobrazí jen doporučené nastavení. Všechny číselně shodné alternativy lze vypsat parametrem:
-
-```powershell
 .venv\Scripts\python -m elatec_uid_tool interactive --show-all-candidates
+.venv\Scripts\python -m elatec_uid_tool ports
+.venv\Scripts\python -m elatec_uid_tool reader-info --port COM13
+.venv\Scripts\python -m elatec_uid_tool test-medium
+.venv\Scripts\python -m elatec_uid_tool capture --port COM13 --expected 12583124
+.venv\Scripts\python -m elatec_uid_tool analyze --raw 3D00C000D4 --bits 40 --expected 12583124
+.venv\Scripts\python -m elatec_uid_tool analyze --raw AE1C56CF --bits 32 --expected 08607342
 ```
 
-Po úspěšné analýze se anonymizovaný vzorek uloží do lokálního souboru `data/samples.json`. Vzorky se seskupují podle `TagType`; program pak hledá pravidla, která platí pro všechny dosud naměřené karty stejného typu. Syrové UID ani DB číslo se do tohoto souboru neukládají, pouze SHA-256 otisk a kandidátní pravidla. Složka `data/` se neposílá na GitHub.
+Jedna připojená čtečka ELATEC se vybere automaticky (USB VID `09D8`).
 
-Samostatný test média bez zadání DB kódu:
+Po úspěšné analýze se anonymizovaný vzorek uloží do `data/samples.json` (SHA-256 otisk + kandidátní pravidla, ne syrová UID). Složka `data/` je v `.gitignore`.
+
+### Desktopové GUI
+
+```text
+gui\run_gui.bat
+```
+
+Záložky: **Čtečka → Načtení karty → Offline analýza**.  
+U nejlepší shody: **Vytvořit FW (CDC)** / **Vytvořit FW (UART)** + export JSON.
+
+Volitelně v prohlížeči: `gui\run_gui_browser.bat`.
+
+### Export firmware (`.bix`)
+
+Vyžaduje DevPack v `elafiles/` (Tools + base image `TWN4_xCx520_STD207_Multi_CDC_Standard.bix`).
 
 ```powershell
-.venv\Scripts\python -m elatec_uid_tool test-medium
+.venv\Scripts\python -m elatec_uid_tool export-fw --raw AE1C56CF --bits 32 --expected 08607342 --channel cdc --tag-type 0x80
+.venv\Scripts\python -m elatec_uid_tool export-fw --raw 3D00C000D4 --bits 40 --expected 12583124 --channel both --tag-type 0x40
+.venv\Scripts\python -m elatec_uid_tool export-fw --from-json results\elatec-….json --channel uart
+.venv\Scripts\python -m elatec_uid_tool export-fw --raw AE1C56CF --bits 32 --expected 867342 --channel cdc --tag-type 0x80
 ```
 
-Bezpečná příprava práce s lokálním Developer Packet:
+Parametry:
+
+| Parametr | Význam |
+|----------|--------|
+| `--raw` / `--bits` / `--expected` | offline shoda |
+| `--from-json` | výsledek `capture` / GUI exportu |
+| `--match-index` | která shoda (0 = nejlepší) |
+| `--channel` | `cdc` \| `uart` \| `both` |
+| `--tag-type` | např. `0x80` MIFARE, `0x40` EM4102 |
+| `--devpack` | cesta k DevPacku (výchozí `elafiles`) |
+| `--output-dir` | výchozí `FW_elatec/export/out` |
+
+Výstup:
+
+```text
+FW_elatec/export/out/App_EXP_CDC.c
+FW_elatec/export/out/TWN4_xCx520_EXP_CDC.bix
+```
+
+Nahrání v AppBlasteru: **Program Firmware Image → Select Image → Program Image**.
+
+Generovaný FW aplikuje stejné pravidlo jako shoda (bit window, reverse bit/byte, Decimal/Hex, Wiegand/PAC/H10301).
+
+### Update reader
 
 ```powershell
 .venv\Scripts\python -m elatec_uid_tool update-reader --devpack files520
 ```
 
-Adresář `files520/` je lokální a je uvedený v `.gitignore`; proprietární ELATEC soubory se tedy necommitují.
+`files520/` i `elafiles/` jsou lokální a v `.gitignore` — proprietární ELATEC balíčky se necommitují.
 
-Seznam portů:
+## Struktura projektu
 
-```powershell
-.venv\Scripts\python -m elatec_uid_tool ports
-```
-
-Informace o čtečce:
-
-```powershell
-.venv\Scripts\python -m elatec_uid_tool reader-info --port COM13
-```
-
-Načtení karty a analýza:
-
-```powershell
-.venv\Scripts\python -m elatec_uid_tool capture --port COM13 --expected 12583124
-```
-
-Offline referenční test:
-
-```powershell
-.venv\Scripts\python -m elatec_uid_tool analyze --raw 3D00C000D4 --bits 40 --expected 12583124
+```text
+src/elatec_uid_tool/
+  analyzer.py      # bitová okna + shody
+  encodings.py     # Wiegand / PAC / H10301 / …
+  fw_export.py     # generování C + build .bix
+  fw_commands.py   # CLI export-fw
+  cli.py           # vstupní bod
+gui/               # NiceGUI desktop
+FW_elatec/
+  wiegand35/       # ruční Wiegand 3+5 User App
+  FIN_kraceni_kodu_PAC_ID_bez_0/  # historický PAC FW (zdroj)
+  export/out/      # generované .bix (gitignore)
+tests/
 ```
 
 ## Testy
@@ -151,8 +215,6 @@ Offline referenční test:
 ```text
 run_tests.bat
 ```
-
-Nebo:
 
 ```powershell
 .venv\Scripts\python -m unittest discover -s tests -v
@@ -163,21 +225,20 @@ Nebo:
 
 - [Architektura](docs/ARCHITECTURE.md)
 - [Příprava čtečky](docs/READER_PREPARATION.md)
-- [Verzování a release proces](docs/VERSIONING.md)
-- [Historie změn](CHANGELOG.md)
-- [Pravidla přispívání](CONTRIBUTING.md)
-- [Publikování na GitHub](docs/GITHUB_SETUP.md)
+- [Verzování a release](docs/VERSIONING.md)
+- [CHANGELOG](CHANGELOG.md)
+- [CONTRIBUTING](CONTRIBUTING.md)
+- [GitHub setup](docs/GITHUB_SETUP.md)
+- [GUI README](gui/README.md)
 
 ## Verzování
 
-Projekt používá Semantic Versioning. Aktuální verze je `0.2.1`; vydané verze se označují anotovanými Git tagy ve tvaru `vMAJOR.MINOR.PATCH`.
-
-Každá významná změna se zapisuje do `CHANGELOG.md` pod sekci `Unreleased`. Podrobný postup vydání je v `docs/VERSIONING.md`.
+Semantic Versioning. Aktuální verze `0.3.0`, tagy `vMAJOR.MINOR.PATCH`. Změny zapisujte do `CHANGELOG.md` pod `Unreleased`.
 
 ## Aktuální omezení
 
-- automatický export AppBlaster projektu zatím není implementovaný,
-- přesný fingerprint některých HF médií zatím není implementovaný,
-- hledání společného pravidla nad více kartami je v TODO,
-- bezpečné automatické nahrání PRS firmware je zatím v návrhu,
-- proprietární ELATEC Developer Pack a PDF dokumentace nejsou součástí repozitáře.
+- automatický export AppBlaster `.abp` projektu zatím není,
+- živé čtení PAC bitů z iCLASS přes Simple Protocol zatím ne (jen offline/H10301 layout a historický C FW),
+- některé HF fingerprinty a společné pravidlo nad více kartami jsou v TODO,
+- automatické nahrání PRS firmware je v návrhu,
+- DevPack a PDF dokumentace ELATEC nejsou v repozitáři.
