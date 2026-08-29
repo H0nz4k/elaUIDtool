@@ -2,9 +2,11 @@
 
 Terminálový nástroj pro analýzu UID z čteček **ELATEC TWN4** a nalezení konfigurace AppBlasteru, která reprodukuje identifikátor uložený v existující databázi.
 
-Aktuální verze: **0.2.0**
+Aktuální verze: **0.2.1**
 
-## Ověřený referenční případ
+## Ověřené referenční případy
+
+### EM4102 (LF)
 
 ```text
 RAW UID:          3D00C000D4
@@ -24,6 +26,20 @@ Reverse Bit Order:  No
 Reverse Byte Order: No
 ```
 
+### MIFARE (HF) – Wiegand 3+5
+
+```text
+RAW UID:          AE1C56CF  →  DB 08607342
+RAW UID:          E9B20DFF  →  DB 01345801
+```
+
+```text
+Reverse Byte Order: Yes
+First Bit:          8
+Number of Bits:     24
+Encoding:           Wiegand 3+5  (facility×100000 + card → FFFCCCCC)
+```
+
 ## Funkce
 
 - komunikace s TWN4 přes Simple Protocol v ASCII režimu,
@@ -32,9 +48,11 @@ Reverse Byte Order: No
 - načtení `TagType`, počtu bitů a raw UID,
 - základní identifikace média a frekvenční skupiny,
 - hledání bitového výřezu a změn bit/byte order,
+- hledání kódování **Wiegand 3+5** (8místný desítkový kód),
 - doporučení konkrétního nastavení AppBlasteru,
 - export výsledků do JSON,
-- offline analýza bez připojené čtečky.
+- offline analýza bez připojené čtečky,
+- desktopové GUI (`gui/run_gui.bat`).
 
 ## Požadavky
 
@@ -152,7 +170,7 @@ Nebo:
 
 ## Verzování
 
-Projekt používá Semantic Versioning. Aktuální verze je `0.2.0`; vydané verze se označují anotovanými Git tagy ve tvaru `vMAJOR.MINOR.PATCH`.
+Projekt používá Semantic Versioning. Aktuální verze je `0.2.1`; vydané verze se označují anotovanými Git tagy ve tvaru `vMAJOR.MINOR.PATCH`.
 
 Každá významná změna se zapisuje do `CHANGELOG.md` pod sekci `Unreleased`. Podrobný postup vydání je v `docs/VERSIONING.md`.
 

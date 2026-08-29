@@ -6,6 +6,19 @@ a verzování používá [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-29
+
+### Added
+
+- Transformace **Wiegand 3+5** (`facility × 100000 + card`, zobrazení `FFFCCCCC`).
+- Ověřené HF případy: `AE1C56CF → 08607342`, `E9B20DFF → 01345801`.
+- Desktopové GUI ve složce `gui/` (NiceGUI, nativní okno / prohlížeč).
+
+### Changed
+
+- Skórování preferuje přesné 24bitové Wiegand 3+5 okno.
+- Výstup CLI/GUI u Wiegand shod ukazuje facility, card number a upozornění na vlastní formátování AppBlasteru.
+
 ## [0.2.0] - 2026-06-25
 
 ### Added

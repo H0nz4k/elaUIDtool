@@ -16,7 +16,14 @@ from .tagtypes import get_tag_type_info
 
 
 def _signature(item):
-    return [item.reverse_bit_order, item.reverse_byte_order, item.first_bit, item.number_of_bits, item.output_format]
+    return [
+        item.reverse_bit_order,
+        item.reverse_byte_order,
+        item.first_bit,
+        item.number_of_bits,
+        item.output_format,
+        getattr(item, "encoding", "plain"),
+    ]
 
 
 def _remember(path, kind, tag, expected, expected_format, matches):

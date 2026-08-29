@@ -7,6 +7,7 @@ from typing import Literal
 
 
 ExpectedFormat = Literal["auto", "decimal", "hexadecimal"]
+Encoding = Literal["plain", "wiegand_3_5"]
 
 
 @dataclass(frozen=True)
@@ -29,12 +30,15 @@ class MatchCandidate:
     output_hex: str
     selected_bits: str
     is_all_bits: bool
+    encoding: Encoding = "plain"
+    facility_code: int | None = None
+    card_number: int | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
 
     def appblaster_settings(self) -> dict:
-        return {
+        settings = {
             "bit_manipulation": {
                 "reverse_bit_order": self.reverse_bit_order,
                 "reverse_byte_order": self.reverse_byte_order,
@@ -45,8 +49,22 @@ class MatchCandidate:
                 "number_of_bits": self.number_of_bits,
             },
             "output_format": self.output_format,
+            "encoding": self.encoding,
             "length": "automatic",
         }
+        if self.encoding == "wiegand_3_5":
+            settings["length"] = "wiegand_3_5_fixed_8"
+            settings["wiegand_3_5"] = {
+                "facility_code": self.facility_code,
+                "card_number": self.card_number,
+                "formula": "facility * 100000 + card",
+                "display": f"{self.facility_code:03d}{self.card_number:05d}",
+                "note": (
+                    "Standardní AppBlaster Decimal nestačí – je potřeba "
+                    "vlastní formátování facility×100000+card (8 číslic)."
+                ),
+            }
+        return settings
 
 
 def normalize_raw_hex(raw_hex: str) -> str:
@@ -118,6 +136,16 @@ def reverse_byte_order(bits: str) -> str:
     return "".join(reversed(chunks))
 
 
+def encode_wiegand_3_5(value_bits_numeric: int) -> tuple[int, int, int, str]:
+    """facility (8 bit) + card (16 bit) → 8místný desítkový kód FFFCCCCC."""
+    value_24 = value_bits_numeric & 0xFFFFFF
+    facility = (value_24 >> 16) & 0xFF
+    card = value_24 & 0xFFFF
+    encoded = facility * 100_000 + card
+    display = f"{facility:03d}{card:05d}"
+    return facility, card, encoded, display
+
+
 def _transform_bits(
     original_bits: str,
     reverse_bits: bool,
@@ -141,6 +169,7 @@ def _candidate_score(
     number_of_bits: int,
     source_bit_count: int,
     automatic_text_match: bool,
+    encoding: Encoding = "plain",
 ) -> float:
     score = 1000.0
 
@@ -174,6 +203,17 @@ def _candidate_score(
         score += 45.0
     if automatic_text_match:
         score += 30.0
+
+    if encoding == "wiegand_3_5":
+        # Preferuj přesně 24bitové okno (facility+card) a bajtový offset.
+        score += 90.0
+        if number_of_bits == 24:
+            score += 100.0
+        elif number_of_bits > 24:
+            # Delší okna fungují jen díky masce 0xFFFFFF – jsou méně přesná.
+            score -= 40.0 + (number_of_bits - 24) * 2.0
+        if first_bit % 8 == 0:
+            score += 25.0
 
     # Při shodném výsledku preferujeme menší offset.
     score -= first_bit * 0.02
@@ -212,54 +252,99 @@ def analyze_uid(
             for number_of_bits in range(1, source_len - first_bit + 1):
                 selected = transformed[first_bit : first_bit + number_of_bits]
                 numeric = int(selected, 2)
-                if numeric != expected.numeric_value:
-                    continue
-
-                decimal_text = str(numeric)
                 hex_width = max(1, math.ceil(number_of_bits / 4))
                 hex_text = f"{numeric:0{hex_width}X}"
-                if expected.format == "decimal":
-                    automatic_text_match = decimal_text == expected.normalized_text
-                    output_format = "Decimal"
-                else:
-                    automatic_hex = f"{numeric:X}"
-                    automatic_text_match = automatic_hex == expected.normalized_text
-                    output_format = "Hexadecimal"
+                is_all = first_bit == 0 and number_of_bits == source_len
 
-                key = (
-                    rev_bits,
-                    rev_bytes,
-                    first_bit,
-                    number_of_bits,
-                    output_format,
-                )
-                if key in seen:
-                    continue
-                seen.add(key)
+                # ── prostá shoda DEC / HEX ──────────────────────────────────
+                if numeric == expected.numeric_value:
+                    if expected.format == "decimal":
+                        automatic_text_match = str(numeric) == expected.normalized_text
+                        output_format = "Decimal"
+                        output_decimal = str(numeric)
+                    else:
+                        automatic_text_match = f"{numeric:X}" == expected.normalized_text
+                        output_format = "Hexadecimal"
+                        output_decimal = str(numeric)
 
-                candidates.append(
-                    MatchCandidate(
-                        rank_score=_candidate_score(
-                            reverse_bits=rev_bits,
-                            reverse_bytes=rev_bytes,
-                            first_bit=first_bit,
-                            number_of_bits=number_of_bits,
-                            source_bit_count=source_len,
-                            automatic_text_match=automatic_text_match,
-                        ),
-                        reverse_bit_order=rev_bits,
-                        reverse_byte_order=rev_bytes,
-                        first_bit=first_bit,
-                        number_of_bits=number_of_bits,
-                        output_format=output_format,
-                        output_decimal=decimal_text,
-                        output_hex=hex_text,
-                        selected_bits=selected,
-                        is_all_bits=(
-                            first_bit == 0 and number_of_bits == source_len
-                        ),
+                    key = (
+                        rev_bits,
+                        rev_bytes,
+                        first_bit,
+                        number_of_bits,
+                        output_format,
+                        "plain",
                     )
-                )
+                    if key not in seen:
+                        seen.add(key)
+                        candidates.append(
+                            MatchCandidate(
+                                rank_score=_candidate_score(
+                                    reverse_bits=rev_bits,
+                                    reverse_bytes=rev_bytes,
+                                    first_bit=first_bit,
+                                    number_of_bits=number_of_bits,
+                                    source_bit_count=source_len,
+                                    automatic_text_match=automatic_text_match,
+                                    encoding="plain",
+                                ),
+                                reverse_bit_order=rev_bits,
+                                reverse_byte_order=rev_bytes,
+                                first_bit=first_bit,
+                                number_of_bits=number_of_bits,
+                                output_format=output_format,
+                                output_decimal=output_decimal,
+                                output_hex=hex_text,
+                                selected_bits=selected,
+                                is_all_bits=is_all,
+                                encoding="plain",
+                            )
+                        )
+
+                # ── Wiegand 3+5 (FFFCCCCC) ──────────────────────────────────
+                # facility (8 bit) × 100000 + card (16 bit), typicky z 24bit okna
+                if expected.format == "decimal" and number_of_bits >= 24:
+                    facility, card, encoded, display = encode_wiegand_3_5(numeric)
+                    if encoded == expected.numeric_value:
+                        automatic_text_match = (
+                            display == expected.original.strip()
+                            or str(encoded) == expected.normalized_text
+                        )
+                        key = (
+                            rev_bits,
+                            rev_bytes,
+                            first_bit,
+                            number_of_bits,
+                            "Decimal",
+                            "wiegand_3_5",
+                        )
+                        if key not in seen:
+                            seen.add(key)
+                            candidates.append(
+                                MatchCandidate(
+                                    rank_score=_candidate_score(
+                                        reverse_bits=rev_bits,
+                                        reverse_bytes=rev_bytes,
+                                        first_bit=first_bit,
+                                        number_of_bits=number_of_bits,
+                                        source_bit_count=source_len,
+                                        automatic_text_match=automatic_text_match,
+                                        encoding="wiegand_3_5",
+                                    ),
+                                    reverse_bit_order=rev_bits,
+                                    reverse_byte_order=rev_bytes,
+                                    first_bit=first_bit,
+                                    number_of_bits=number_of_bits,
+                                    output_format="Decimal (Wiegand 3+5)",
+                                    output_decimal=display,
+                                    output_hex=hex_text,
+                                    selected_bits=selected,
+                                    is_all_bits=is_all,
+                                    encoding="wiegand_3_5",
+                                    facility_code=facility,
+                                    card_number=card,
+                                )
+                            )
 
     candidates.sort(
         key=lambda item: (

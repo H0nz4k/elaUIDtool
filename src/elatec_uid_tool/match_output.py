@@ -8,7 +8,7 @@ def yes_no(value: bool) -> str:
 
 
 def _settings(match):
-    return (
+    rows = [
         ("Selected HEX", match.output_hex),
         ("Selected DEC", match.output_decimal),
         ("Reverse Bit Order", yes_no(match.reverse_bit_order)),
@@ -17,14 +17,29 @@ def _settings(match):
         ("First Bit", 0 if match.is_all_bits else match.first_bit),
         ("Number of Bits", match.number_of_bits),
         ("Output Format", match.output_format),
-        ("Length", "Automatic"),
-    )
+    ]
+    if getattr(match, "encoding", "plain") == "wiegand_3_5":
+        rows.extend(
+            [
+                ("Encoding", "Wiegand 3+5 (FFFCCCCC)"),
+                ("Facility Code", match.facility_code),
+                ("Card Number", match.card_number),
+                ("Length", "8 digits (facility×100000+card)"),
+            ]
+        )
+    else:
+        rows.append(("Length", "Automatic"))
+    return tuple(rows)
 
 
 def _print_settings(match, prefix=""):
     for label, value in _settings(match):
         print(f"{prefix}{label + ':':<20}{value}")
-
+    if getattr(match, "encoding", "plain") == "wiegand_3_5":
+        print(
+            f"{prefix}Poznámka:           Standardní AppBlaster Decimal nestačí – "
+            "je potřeba vlastní formátování výstupu."
+        )
 
 def print_matches(raw_hex, bit_count, expected_text, expected_format, max_results, show_all_candidates=False):
     expected, matches = analyze_uid(raw_hex, bit_count, expected_text, expected_format, max_results)
