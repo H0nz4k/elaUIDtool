@@ -6,6 +6,19 @@ a verzování používá [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-30
+
+### Added
+
+- Podrobný návod [docs/NAVOD.md](docs/NAVOD.md) (instalace, GUI, analýza, build FW, Jarov).
+- `build_fw.bat` – jedním krokem sestaví `.bix` (výchozí stolní karta Wiegand 3+5).
+- Obnovený `scripts/release.py` pro bump verze + CHANGELOG.
+- Menu `elaUIDtool.bat`: volby **GUI** a **Build FW**.
+
+### Changed
+
+- README přepsán na rychlý start + odkazy na návod, encodingy a FW export.
+
 ## [0.3.0] - 2026-08-29
 
 ### Added

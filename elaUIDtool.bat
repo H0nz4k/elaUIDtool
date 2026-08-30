@@ -34,13 +34,19 @@ echo.
 echo   1. Tests - otestovat medium a vypsat jeho typ
 echo   2. Interactive mode - hledani UID a pravidla pro AppBlaster
 echo   3. Update reader - priprava PRS a vlastniho firmware
+echo   4. GUI - desktopova aplikace
+echo   5. Build FW - sestavit .bix (Wiegand 3+5 / export-fw)
 echo   0. Konec
 echo.
-set /p "CHOICE=Vyber 0-3: "
+echo   Navod: docs\NAVOD.md
+echo.
+set /p "CHOICE=Vyber 0-5: "
 
 if "%CHOICE%"=="1" goto :test_medium
 if "%CHOICE%"=="2" goto :interactive
 if "%CHOICE%"=="3" goto :update_reader
+if "%CHOICE%"=="4" goto :gui
+if "%CHOICE%"=="5" goto :build_fw
 if "%CHOICE%"=="0" goto :end
 
 echo.
@@ -62,8 +68,22 @@ goto :menu
 
 :update_reader
 cls
-"%PYTHON%" -m elatec_uid_tool update-reader --devpack "%~dp0files520"
+if exist "%~dp0elafiles\Tools\makeapp.exe" (
+    "%PYTHON%" -m elatec_uid_tool update-reader --devpack "%~dp0elafiles"
+) else (
+    "%PYTHON%" -m elatec_uid_tool update-reader --devpack "%~dp0files520"
+)
 call :pause_and_menu
+goto :menu
+
+:gui
+cls
+call "%~dp0gui\run_gui.bat"
+goto :menu
+
+:build_fw
+cls
+call "%~dp0build_fw.bat"
 goto :menu
 
 :pause_and_menu
@@ -78,5 +98,4 @@ pause
 exit /b 1
 
 :end
-endlocal
 exit /b 0
