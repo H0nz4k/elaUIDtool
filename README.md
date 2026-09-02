@@ -1,167 +1,244 @@
-# ELATEC – kód identifikace
+# ELATEC UID Tool 0.4.1
 
-Terminálový a desktopový nástroj pro analýzu UID z čteček **ELATEC TWN4** a nalezení konfigurace AppBlasteru (nebo vlastního firmware), která reprodukuje identifikátor uložený v existující databázi.
+Windows aplikace pro práci s identifikátory karet na čtečkách **ELATEC TWN4**.
 
-Aktuální verze: **0.3.1**  
-Repozitář: [https://github.com/H0nz4k/elaUIDtool](https://github.com/H0nz4k/elaUIDtool)
+Pomůže ti:
+1. **porovnat** kód, který vrací čtečka, s kódem v databázi,
+2. **najít pravidlo** převodu (reverse byte, Wiegand 3+5, …),
+3. **sestavit firmware** (`.bix`) pro čtečku,
+4. volitelně **načíst kartu** přes USB (Simple Protocol / PRS).
 
-**Kompletní návod:** [docs/NAVOD.md](docs/NAVOD.md)
+Repozitář: [https://github.com/H0nz4k/elaUIDtool](https://github.com/H0nz4k/elaUIDtool)  
+Podrobný návod: [docs/NAVOD.md](docs/NAVOD.md)
 
-## Rychlý start
+---
 
-```text
-1. elaUIDtool.bat              ← instalace + CLI menu
-2. gui\run_gui.bat             ← desktopová aplikace
-3. build_fw.bat                ← sestaví .bix (Wiegand 3+5, vyžaduje elafiles/)
-```
+## Co umí
 
-Nahrání `.bix` v AppBlasteru: **Program Firmware Image → Select Image → Program Image**.
+| Funkce | Popis |
+|--------|--------|
+| **Porovnání bez čipu** | Zadáš RAW UID z čtečky + kód z DB → tool najde pravidlo |
+| **Vytvořit FW** | Sestaví flashovatelný `.bix` (CDC/UART) jako u Jarova |
+| **Načtení karty** | Přes COM a PRS firmware načte UID a porovná s DB |
+| **Info o čtečce** | Verze FW, LF/HF masky, TagType |
+| **Nastavení DevPacku** | Cesta k `TWN4DevPack520` nebo novějšímu |
+| **CLI** | Stejná logika z příkazové řádky |
 
-## Ověřené referenční případy
+### Podporované převody
 
-### EM4102 (LF) – plain Decimal
+| Encoding | Co dělá | Příklad |
+|----------|---------|---------|
+| plain Decimal / Hex | bitové okno | `12583124` |
+| **Wiegand 3+5** | facility×100000+card | `E9B20DFF` → `01345801` |
+| Wiegand 3+5 bez nul | totéž bez vedoucích nul | `8607342` |
+| Reverse Byte | otočení bajtů | `813F9A04` → `049A3F81` |
+| PAC digit-concat | FC+card jako číslice | `867342` |
+| H10301 / card / facility | 26bit a odvozené | — |
 
-```text
-RAW UID:          3D00C000D4
-RAW délka:        40 bitů
-DB identifikátor: 12583124
-```
+U Wiegand 3+5 a PAC **nestačí** standardní AppBlaster Decimal — musíš nahrát vlastní FW z tohoto toolu.
 
-```text
-Output Bits:        Some Bits
-First Bit:          8
-Number of Bits:     32
-Output Format:      Decimal
-Reverse Bit/Byte:   No / No
-Encoding:           plain
-```
-
-### MIFARE (HF) – Wiegand 3+5 (Jarov / stůl)
-
-```text
-RAW UID:          E9B20DFF  →  DB 01345801   (facility 13, card 45801)
-RAW UID:          AE1C56CF  →  DB 08607342   (facility 86, card 7342)
-```
-
-```text
-Reverse Byte Order: Yes
-First Bit:          8
-Number of Bits:     24
-Encoding:           wiegand_3_5  (facility×100000 + card → FFFCCCCC)
-```
-
-Karty `03921353` / `12607299` mají stejné pravidlo, ale zatím nejsou fyzicky ověřené v toolu.
-
-### HID iCLASS / PAC (historický FW)
-
-V `FW_elatec/FIN_kraceni_kodu_PAC_ID_bez_0/` je ověřený User App (H10301 + digit-concat / strip nul).  
-Stejné převody jsou v analyzátoru: `facility_card_concat`, `h10301_*`, `wiegand_3_5_strip`.
-
-## Funkce
-
-- komunikace s TWN4 přes Simple Protocol (ASCII),
-- verze firmware, typ zařízení, LF/HF masky,
-- načtení `TagType`, bitové délky a RAW UID,
-- hledání bitového okna + reverse bit/byte order,
-- strukturované encodingy (Wiegand / PAC / H10301 / …),
-- doporučení nastavení AppBlasteru,
-- export JSON,
-- sestavení flashovatelného `.bix` (`export-fw`, GUI, `build_fw.bat`),
-- offline analýza, desktopové GUI.
-
-## Podporované encodingy
-
-| Encoding | Popis | Příklad |
-|----------|--------|---------|
-| `plain` | Decimal / Hex z bitového okna | `12583124` |
-| `wiegand_3_5` | facility×100000+card | `08607342` |
-| `wiegand_3_5_strip` | 3+5 bez vedoucích nul | `8607342` |
-| `facility_card_concat` | PAC digit-concat | `867342` |
-| `card_16` / `facility_8` | jen card / jen facility | `7342` / `86` |
-| `scale_4` / `scale_6` | ×10⁴ / ×10⁶ | — |
-| `h10301_*` | 26bit H10301 → 3+5 / concat / card / strip | — |
-
-U strukturovaných encodingů **AppBlaster Decimal nestačí** → použij `build_fw.bat` / **Vytvořit FW**.
+---
 
 ## Požadavky
 
-- Windows 10/11, Python 3.10+
-- TWN4 s firmware **PRS** (čtení karet)
-- Pro build `.bix`: DevPack v `elafiles/` (gitignore)
+- **Windows 10/11**
+- **Python 3.10+** (zapni *Add python.exe to PATH*)
+- Pro sestavení FW: **ELATEC TWN4DevPack520** (nebo novější) — proprietární, není v ZIPu
+- Pro načtení karty přes USB: čtečka s firmware **PRS** (Simple Protocol)
+- Před prací s COM **zavři AppBlaster Director** (drží port)
 
-Director drží COM port — před toolu ho zavři.
+---
 
-## Instalace a spuštění
+## Instalace (kolegové)
+
+1. Rozbal složku `elaUIDtool-0.4.1` (nebo naklonuj repo).
+2. Spusť:
 
 ```text
-elaUIDtool.bat          # menu: test média, interactive, update reader, GUI, build FW
-gui\run_gui.bat         # nativní okno
-gui\run_gui_browser.bat # prohlížeč
-build_fw.bat            # export .bix (výchozí E9B20DFF → 01345801)
-run_tests.bat           # unit testy
+elaUIDtool.bat
 ```
 
-```powershell
-py -m venv .venv
-.venv\Scripts\python -m pip install -e .
-.venv\Scripts\python -m pip install -r gui\requirements.txt
+Vytvoří `.venv`, nainstaluje balíček a otevře menu.
+
+3. Pro GUI:
+
+```text
+gui\run_gui.bat
 ```
 
-## CLI příklady
+Otevře se **Windows okno** (ne prohlížeč).
+
+### DevPack (jen když chceš tvořit `.bix`)
+
+1. Zkopíruj `TWN4DevPack520` do složky `elafiles\` vedle toolu,  
+   **nebo** v GUI → **Nastavení** zadej cestu k DevPacku.
+2. Ověř, že existují:
+
+```text
+elafiles\Tools\makeapp.exe
+elafiles\Apps\App_STD207_Standard_temp.c
+elafiles\Apps\TWN4_CCx520.bix
+elafiles\Apps\TWN4_MCx520.bix
+elafiles\Apps\TWN4_NCx520.bix
+```
+
+---
+
+## Jak používat GUI
+
+### A) Typický postup bez čipu (doporučeno)
+
+1. Otevři `gui\run_gui.bat`.
+2. Záložka **Porovnání**.
+3. **Kód z čtečky** = RAW UID hex (např. `E9B20DFF`).
+4. **Kód z databáze** = hodnota z DB (např. `01345801`).
+5. Klikni **Porovnat a najít pravidlo**.
+6. U shody → **Vytvořit FW (CDC)**.
+7. V AppBlasteru nahraj:
+
+```text
+FW_elatec\export\out\TWN4_xCx520_EXP_CDC.bix
+```
+
+**Program Firmware Image → Select Image → Program Image.**
+
+### B) S fyzickou čtečkou
+
+1. Nahraj do čtečky **PRS** (Simple Protocol).
+2. Záložka **Čtečka** → ověř COM a PRS.
+3. Záložka **Načtení karty** → zadej DB kód → přilož kartu.
+4. **Vytvořit FW (CDC)**.
+
+### C) Nastavení
+
+Záložka **Nastavení** → cesta k DevPacku → **Uložit** → **Ověřit**.
+
+---
+
+## Ověřené příklady
+
+### Jarov / stůl (MIFARE → Wiegand 3+5)
+
+| Čtečka (RAW) | Databáze | Pravidlo |
+|--------------|----------|----------|
+| `E9B20DFF` | `01345801` | Reverse Byte, First Bit 8, 24 bit, facility×100000+card |
+| `AE1C56CF` | `08607342` | stejné |
+
+### Reverse Byte (hex DB)
+
+| Čtečka | Databáze |
+|--------|----------|
+| `813F9A04` | `049A3F81` |
+
+### EM4102 (LF)
+
+| RAW | DB | Pravidlo |
+|-----|-----|----------|
+| `3D00C000D4` (40 bit) | `12583124` | First Bit 8, 32 bit, Decimal, bez reverse |
+
+---
+
+## Spouštěče
+
+| Soubor | Účel |
+|--------|------|
+| `releases\elaUIDtool-*-win64-gui\elaUIDtool.exe` | **pouze GUI** – Windows okno pro kolegy (bez Pythonu) |
+| `elaUIDtool.bat` | instalace + menu (vývoj) |
+| `gui\run_gui.bat` | GUI z Pythonu (vývoj) |
+| `build_fw.bat` | sestavení `.bix` bez GUI |
+| `install_windows.bat` | jen instalace `.venv` |
+| `run_tests.bat` | unit testy |
+| `scripts\build_exe.bat` | sestavení GUI `.exe` (PyInstaller onedir) |
+
+---
+
+## CLI (pro pokročilé)
 
 ```powershell
-.venv\Scripts\python -m elatec_uid_tool interactive
-.venv\Scripts\python -m elatec_uid_tool ports
-.venv\Scripts\python -m elatec_uid_tool reader-info --port COM13
-.venv\Scripts\python -m elatec_uid_tool test-medium
-.venv\Scripts\python -m elatec_uid_tool capture --expected 01345801
 .venv\Scripts\python -m elatec_uid_tool analyze --raw E9B20DFF --bits 32 --expected 01345801
 .venv\Scripts\python -m elatec_uid_tool export-fw --raw E9B20DFF --bits 32 --expected 01345801 --channel cdc --tag-type 0x80
-.venv\Scripts\python -m elatec_uid_tool export-fw --from-json results\elatec-….json --channel both
+.venv\Scripts\python -m elatec_uid_tool capture --expected 01345801
+.venv\Scripts\python -m elatec_uid_tool ports
 ```
 
-Výstup FW: `FW_elatec/export/out/TWN4_xCx520_EXP_CDC.bix` (nebo `_UART`).
-
-`build_fw.bat cdc AE1C56CF 08607342 0x80` — vlastní RAW / expected / tag-type.
-
-## Struktura
+Výstup FW:
 
 ```text
-src/elatec_uid_tool/   # analyzer, encodings, fw_export, CLI
-gui/                   # NiceGUI desktop
-docs/NAVOD.md          # podrobný návod
-build_fw.bat           # jedním klikem .bix
-FW_elatec/
-  wiegand35/           # ruční Wiegand 3+5 projekt
-  FIN_kraceni_…/       # historický PAC FW (zdroj)
-  export/out/          # generované .bix (gitignore)
-tests/
-scripts/release.py     # bump verze + CHANGELOG
+FW_elatec\export\out\appconfig.c
+FW_elatec\export\out\appconfig.h
+FW_elatec\export\out\TWN4_xCx520_EXP_CDC.bix
 ```
 
-## Testy a release
+---
 
-```powershell
-.venv\Scripts\python -m unittest discover -s tests -v
-.venv\Scripts\python scripts\check_version.py
-.venv\Scripts\python scripts\release.py 0.3.2
+## Struktura projektu
+
+```text
+elaUIDtool/
+  gui/                 Windows GUI (NiceGUI okno)
+  src/elatec_uid_tool/ analyzátor, encodingy, export FW
+  docs/NAVOD.md        podrobný návod
+  FW_elatec/           šablony a výstup .bix
+  elafiles/            DevPack520 (lokálně, ne v Gitu)
+  releases/            hotové balíčky verzí (pack_release)
+  tests/
 ```
 
-Postup tagu: [docs/VERSIONING.md](docs/VERSIONING.md).
+## Balíček pro kolegy
 
-## Dokumentace
+**Doporučeno – jen GUI EXE** (bez Pythonu):
 
-- [Návod (NAVOD)](docs/NAVOD.md)
-- [Architektura](docs/ARCHITECTURE.md)
-- [Příprava čtečky](docs/READER_PREPARATION.md)
-- [Verzování](docs/VERSIONING.md)
-- [CHANGELOG](CHANGELOG.md)
-- [GUI](gui/README.md)
-- [Wiegand35 FW](FW_elatec/wiegand35/README.md)
+```text
+scripts\build_exe.bat
+```
 
-## Aktuální omezení
+Výstup:
 
-- automatický export AppBlaster `.abp` zatím ne,
-- živé `ICLASS_GetPACBits` přes Simple Protocol zatím ne,
-- H10306/H10304/Corporate 1000 zatím ne (doplní se podle RAW+DB),
-- DevPack a proprietární ELATEC PDF nejsou v repozitáři.
+```text
+releases\elaUIDtool-0.4.1-win64-gui\elaUIDtool.exe
+```
+
+Spusť `elaUIDtool.exe`. Porovnání funguje ihned. Pro **Vytvořit FW** zkopíruj DevPack520 do `elafiles\` vedle EXE, nebo nastav cestu v GUI → Nastavení.
+
+Zdrojový (Python) balíček:
+
+```text
+scripts\pack_release.bat
+```
+
+```text
+releases\elaUIDtool-0.4.1-win64-gui.zip
+releases\elaUIDtool-0.4.1\
+releases\elaUIDtool-0.4.1.zip
+```
+
+DevPack se do balíčků nedává (licence ELATEC).
+
+## Časté problémy
+
+| Problém | Řešení |
+|---------|--------|
+| Port se neotevře | Zavři Director / jiný program na COM |
+| „not compatible“ při flashi | Použij `.bix` z aktuálního exportu (musí obsahovat CCx+MCx+**NCx**) |
+| GCC / makeapp chybí | Nastav DevPack v GUI → Nastavení |
+| Po nahrání EXP tool nečte karty | Je produkční FW; pro analýzu nahraj PRS zpět |
+| GUI nejde spustit | Python 3.10+, `elaUIDtool.bat`, pak `gui\run_gui.bat` |
+
+## Changelog / dokumentace
+
+- [CHANGELOG.md](CHANGELOG.md)
+- [docs/NAVOD.md](docs/NAVOD.md)
+- [docs/VERSIONING.md](docs/VERSIONING.md)
+- [gui/README.md](gui/README.md)
+
+## Licence / omezení
+
+- ELATEC DevPack a `.bix` image jsou proprietární — do balíčku toolu se nedávají.
+- Automatický flash přes Raspberry zatím není.
+- AppBlaster `.abp` export zatím není.
+
+---
+
+## Changelog
+
+Viz [CHANGELOG.md](CHANGELOG.md). Aktuální verze: **0.4.1**.

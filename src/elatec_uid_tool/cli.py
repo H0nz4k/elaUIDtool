@@ -119,6 +119,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="USB CDC, COM1 UART, nebo obojí",
     )
     p.add_argument("--devpack", default="elafiles")
+    p.add_argument(
+        "--base-bix",
+        help="Base Standard .bix (výchozí: TWN4_xCx520_STD207_Multi_CDC_Standard.bix)",
+    )
+    p.add_argument(
+        "--branch",
+        default="0520",
+        help="makeapp -b větev DevPacku BCD (0520=5.20, 0620=6.20)",
+    )
     p.add_argument("--output-dir", default="FW_elatec/export/out")
     p.add_argument("--max-results", type=int, default=50)
     p.set_defaults(func=command_export_fw)

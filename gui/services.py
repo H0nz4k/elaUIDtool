@@ -183,9 +183,26 @@ def export_firmware_bix(
     channel: HostChannel,
     *,
     tag_type: int | None = None,
+    devpack: Path | None = None,
 ) -> Path:
+    from settings_store import get_devpack_path, validate_devpack
+
     match = match_from_display(match_data)
-    result = build_firmware(match, channel=channel, tag_type=tag_type)
+    pack = (devpack or get_devpack_path()).resolve()
+    missing = validate_devpack(pack)
+    if missing:
+        raise ElatecError(
+            "DevPack není kompletní pro sestavení FW (STD207 + CCx/MCx/NCx).\n\n"
+            f"Cesta: {pack}\n"
+            "Chybí:\n- " + "\n- ".join(missing[:8])
+            + "\n\nNastav cestu k TWN4DevPack520 v záložce Nastavení."
+        )
+    result = build_firmware(
+        match,
+        channel=channel,
+        tag_type=tag_type,
+        devpack=pack,
+    )
     return result.bix_path
 
 

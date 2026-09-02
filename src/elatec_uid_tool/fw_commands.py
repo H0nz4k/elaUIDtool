@@ -86,6 +86,9 @@ def command_export_fw(args) -> int:
     if tag_type is not None:
         print(f"TagType:  0x{tag_type:02X}")
     print(f"Kanál:    {args.channel}")
+    if getattr(args, "base_bix", None):
+        print(f"Base BIX: {args.base_bix}")
+    print(f"Branch:   {getattr(args, 'branch', '0520')}")
     print()
 
     results = export_channels(
@@ -94,11 +97,15 @@ def command_export_fw(args) -> int:
         tag_type=tag_type,
         devpack=Path(args.devpack) if args.devpack else None,
         output_dir=Path(args.output_dir) if args.output_dir else None,
+        base_bix=Path(args.base_bix) if getattr(args, "base_bix", None) else None,
+        branch=getattr(args, "branch", "0520"),
     )
     for item in results:
         print(f"[{item.channel.upper()}]")
-        print(f"  C:   {item.source_c}")
-        print(f"  BIX: {item.bix_path}")
+        print(f"  appconfig.c: {item.source_c}")
+        print(f"  appconfig.h: {item.appconfig_h}")
+        print(f"  HEX:         {item.hex_path}")
+        print(f"  BIX:         {item.bix_path}")
         print()
     print("Nahraj .bix v AppBlasteru: Program Firmware Image -> Select Image -> Program Image")
     return 0

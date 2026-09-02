@@ -34,7 +34,7 @@ echo.
 echo   1. Tests - otestovat medium a vypsat jeho typ
 echo   2. Interactive mode - hledani UID a pravidla pro AppBlaster
 echo   3. Update reader - priprava PRS a vlastniho firmware
-echo   4. GUI - desktopova aplikace
+echo   4. GUI - Windows desktopove okno (porovnani + FW)
 echo   5. Build FW - sestavit .bix (Wiegand 3+5 / export-fw)
 echo   0. Konec
 echo.

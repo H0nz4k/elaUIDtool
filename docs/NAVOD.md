@@ -1,6 +1,6 @@
-# Návod – ELATEC UID Tool 0.3.x
+# Návod – ELATEC UID Tool 0.4.x
 
-Kompletní postup: instalace → GUI/CLI → analýza shody → sestavení `.bix` → nahrání do čtečky.
+Kompletní postup: instalace → Windows GUI → porovnání / načtení → sestavení `.bix` → nahrání do čtečky.
 
 ## 1. Instalace
 
@@ -21,38 +21,52 @@ py -m venv .venv
 .venv\Scripts\python -m pip install -r gui\requirements.txt
 ```
 
-### DevPack (jen pro sestavení FW)
+### DevPack (pro sestavení FW)
 
-Zkopíruj ELATEC Developer Pack **520** do složky `elafiles/` (v `.gitignore`, necommitovat).
+Výchozí je **TWN4DevPack520**. Zkopíruj ho do `elafiles/` (gitignore), nebo v GUI → **Nastavení** zadej cestu k `TWN4DevPackxxx`.
 
-Musí existovat např.:
+Musí existovat:
 
 ```text
-elafiles\Tools\makeapp.exe
-elafiles\Tools\Yagarto-20110328\bin\arm-none-eabi-gcc.exe
-elafiles\Firmware\TWN4_xCx520_STD207_Multi_CDC_Standard.bix
+…\Tools\makeapp.exe
+…\Tools\Yagarto-20110328\bin\arm-none-eabi-gcc.exe
+…\Apps\App_STD207_Standard_temp.c
+…\Apps\TWN4_CCx520.bix
+…\Apps\TWN4_MCx520.bix
+…\Apps\TWN4_NCx520.bix
 ```
 
-## 2. Spuštění aplikace
+## 2. Spuštění (Windows okno)
 
 | Co | Jak |
 |----|-----|
 | **Desktopové GUI** | `gui\run_gui.bat` |
-| GUI v prohlížeči | `gui\run_gui_browser.bat` |
 | Menu CLI | `elaUIDtool.bat` |
-| Interaktivní analýza | volba **2** v menu, nebo `run_interactive.bat` |
+| Build FW z BAT | `build_fw.bat` |
 
-Před načtením karty **zavři Director** (jinak je COM port obsazený).
+Aplikace běží **jen jako nativní Windows okno** (prohlížeč není podporován).
 
-## 3. GUI – typický postup
+Před načtením karty přes COM **zavři Director** (jinak je port obsazený).
 
-1. Záložka **Čtečka** → obnov porty → ověř firmware (ideálně **PRS**).
-2. Záložka **Načtení karty** → zadej DB kód (např. `01345801`) → načti kartu.
-3. U **Nejlepší shody** zkontroluj encoding (Wiegand 3+5, plain, PAC, …).
-4. Tlačítka **Vytvořit FW (CDC)** / **Vytvořit FW (UART)** → `.bix` do `FW_elatec\export\out\`.
-5. Volitelně **Exportovat JSON** do `results\`.
+## 3. GUI – typický postup pro kolegy
 
-Offline bez čtečky: záložka **Offline analýza** (RAW hex + DB kód).
+### A) Bez čipu a bez PRS (doporučeno)
+
+1. Záložka **Porovnání**.
+2. **Kód z čtečky** = RAW UID hex (např. `E9B20DFF` nebo `813F9A04`).
+3. **Kód z databáze** = identifikátor z DB (např. `01345801` nebo `049A3F81`).
+4. **Porovnat a najít pravidlo**.
+5. U shody → **Vytvořit FW (CDC)**.
+
+### B) S fyzickou čtečkou (PRS)
+
+1. Záložka **Čtečka** → ověř PRS.
+2. Záložka **Načtení karty** → DB kód → přilož kartu.
+3. **Vytvořit FW (CDC/UART)**.
+
+### C) Nastavení DevPacku
+
+Záložka **Nastavení** → cesta k `TWN4DevPack520` (nebo novějšímu) → Uložit → Ověřit.
 
 ## 4. CLI – analýza
 
@@ -80,42 +94,38 @@ Encoding:           facility × 100000 + card   (8 číslic FFFCCCCC)
 
 ## 5. Build firmware (`.bix`)
 
-### A) Jednoduchý BAT (doporučeno)
+Build = AppBlaster logika DevPack 520:
+
+`App_STD207_Standard_temp.c` + `appconfig.c` + `makeapp -iCCx -iMCx -iNCx`.
+
+### A) GUI
+
+Po shodě: **Vytvořit FW (CDC)**.
+
+### B) BAT
 
 ```text
 build_fw.bat
-build_fw.bat cdc
-build_fw.bat uart
-build_fw.bat both
-```
-
-Výchozí referenční karta: `E9B20DFF` / `01345801`. Vlastní hodnoty:
-
-```text
 build_fw.bat cdc AE1C56CF 08607342 0x80
 ```
 
-### B) CLI
+### C) CLI
 
 ```powershell
 .venv\Scripts\python -m elatec_uid_tool export-fw --raw E9B20DFF --bits 32 --expected 01345801 --channel cdc --tag-type 0x80
 ```
 
-### C) Ruční Wiegand projekt
-
-```text
-FW_elatec\wiegand35\build.bat cdc
-```
-
 ### Výstup
 
 ```text
+FW_elatec\export\out\appconfig.c
+FW_elatec\export\out\appconfig.h
 FW_elatec\export\out\TWN4_xCx520_EXP_CDC.bix
-FW_elatec\export\out\TWN4_xCx520_EXP_UART.bix
 ```
 
-- **CDC** = USB virtuální COM (MultiTech 2/3)
-- **UART** = COM1 9600 8N1
+Důležité pro `makeapp`:  
+`-v4 -tTWN4 -nTWN4 -b0520 -iTWN4_CCx520.bix -iTWN4_MCx520.bix -iTWN4_NCx520.bix`  
+Bez NCx AppBlaster hlásí „not compatible“.
 
 ## 6. Nahrání do čtečky
 
@@ -124,34 +134,19 @@ FW_elatec\export\out\TWN4_xCx520_EXP_UART.bix
 3. **Program Image**.
 4. Ověř přiložením stolní karty (`01345801` / `08607342`).
 
-Standardní AppBlaster „Decimal“ **nestačí** na Wiegand 3+5 — musí být vlastní User App (tento export).
-
 ## 7. Provoz Jarov
 
-FW se nestaví na jednu kartu, ale na **stejné pravidlo**. Karty `03921353` / `12607299` ověř až fyzicky:
+FW se nestaví na jednu kartu, ale na **stejné pravidlo**.
 
 ```powershell
 .venv\Scripts\python -m elatec_uid_tool capture --expected 03921353
 ```
 
-Očekávaná shoda: zase Wiegand 3+5 (pro `03921353` → FC 39, card 21353).
+## 8. Troubleshooting
 
-## 8. Testy před releasem
-
-```text
-run_tests.bat
-```
-
-```powershell
-.venv\Scripts\python -m unittest discover -s tests -v
-.venv\Scripts\python scripts\check_version.py
-```
-
-## 9. Verze a GitHub
-
-- Verze: `src/elatec_uid_tool/__init__.py`
-- CHANGELOG: `CHANGELOG.md`
-- Release helper: `python scripts/release.py X.Y.Z`
-- Repozitář: https://github.com/H0nz4k/elaUIDtool
-
-Další dokumenty: [README](../README.md), [Architektura](ARCHITECTURE.md), [Příprava čtečky](READER_PREPARATION.md), [Verzování](VERSIONING.md).
+| Problém | Řešení |
+|---------|--------|
+| Port se neotevře | Zavři Director / jiný COM nástroj |
+| „not compatible“ | Použij `.bix` z aktuálního exportu (CCx+MCx+NCx), ne starý image |
+| GCC / makeapp chybí | Nastav DevPack520 v GUI → Nastavení |
+| Po EXP nefunguje tool přes COM | Je nahraný produkční FW; pro analýzu nahraj PRS zpět |

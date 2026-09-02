@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "elatec-uid-tool"
 dynamic = ["version"]
-description = "Terminálový analyzátor UID pro ELATEC TWN4 a AppBlaster"
+description = "Windows analyzátor UID pro ELATEC TWN4 – porovnání DB/RAW a export FW"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

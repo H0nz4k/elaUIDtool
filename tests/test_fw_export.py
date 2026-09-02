@@ -2,10 +2,20 @@ import unittest
 from pathlib import Path
 
 from elatec_uid_tool.analyzer import analyze_uid
-from elatec_uid_tool.fw_export import DEFAULT_DEVPACK, generate_app_source
+from elatec_uid_tool.fw_export import DEFAULT_DEVPACK, generate_app_source, generate_appconfig_c
 
 
 class FirmwareExportSourceTests(unittest.TestCase):
+    def test_wiegand_appconfig_contains_formula(self):
+        _, matches = analyze_uid("AE1C56CF", 32, "08607342", "auto", 20)
+        wiegand = next(m for m in matches if m.encoding == "wiegand_3_5")
+        src = generate_appconfig_c(wiegand, channel="cdc", tag_type=0x80)
+        self.assertIn("facility * 100000u + card", src)
+        self.assertIn("ReadType1", src)
+        self.assertIn("CompLEDInit", src)
+        self.assertIn("SetHostChannel(CHANNEL_USB)", src)
+        self.assertNotIn("int main", src)
+
     def test_wiegand_source_contains_formula(self):
         _, matches = analyze_uid("AE1C56CF", 32, "08607342", "auto", 20)
         wiegand = next(m for m in matches if m.encoding == "wiegand_3_5")
@@ -44,6 +54,25 @@ class FirmwareExportSourceTests(unittest.TestCase):
 
 
 @unittest.skipUnless(
+    (DEFAULT_DEVPACK / "Apps" / "TWN4_NCx520.bix").exists(),
+    "Family BIX CCx/MCx/NCx nejsou v elafiles/Apps",
+)
+class FirmwareExportMakeappInputTests(unittest.TestCase):
+    def test_uses_ccx_mcx_ncx_family_images(self):
+        from elatec_uid_tool.fw_export import _makeapp_input_bixes
+
+        base = DEFAULT_DEVPACK / "Firmware" / "TWN4_xCx520_STD207_Multi_CDC_Standard.bix"
+        out = Path(__file__).resolve().parents[1] / "FW_elatec" / "export" / "out_test"
+        out.mkdir(parents=True, exist_ok=True)
+        inputs = _makeapp_input_bixes(DEFAULT_DEVPACK.resolve(), base, out)
+        names = [p.name for p in inputs]
+        self.assertEqual(
+            names,
+            ["TWN4_CCx520.bix", "TWN4_MCx520.bix", "TWN4_NCx520.bix"],
+        )
+
+
+@unittest.skipUnless(
     (DEFAULT_DEVPACK / "Tools" / "makeapp.exe").exists(),
     "DevPack elafiles/ není k dispozici",
 )
@@ -61,7 +90,12 @@ class FirmwareExportBuildTests(unittest.TestCase):
             output_dir=out,
         )
         self.assertTrue(result.bix_path.exists())
-        self.assertGreater(result.bix_path.stat().st_size, 1000)
+        self.assertTrue(result.appconfig_h.exists())
+        self.assertEqual(result.source_c.name, "appconfig.c")
+        packed = result.bix_path.read_bytes()
+        self.assertGreater(len(packed), 700_000)
+        self.assertGreaterEqual(packed.count(b"flashinfo"), 3)
+        self.assertIn(b"nCFmi", packed)
 
 
 if __name__ == "__main__":

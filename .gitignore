@@ -20,6 +20,9 @@ dist/
 *.map
 *.zip
 
+# GUI user settings (local DevPack path)
+/gui/user_settings.json
+
 # Local ELATEC Developer Pack (proprietary, do not commit)
 /files520/
 /files520.zip
@@ -33,3 +36,6 @@ dist/
 
 # Local measurements and learned rules
 /data/
+
+# Packed colleague releases (regenerate via scripts/pack_release.bat)
+/releases/

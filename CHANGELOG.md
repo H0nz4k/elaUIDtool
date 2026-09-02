@@ -6,6 +6,39 @@ a verzování používá [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-02
+
+### Added
+
+- Windows GUI `.exe` (PyInstaller onedir) – `scripts/build_exe.bat`, výstup `releases/elaUIDtool-*-win64-gui/`.
+- Aplikační ikona HanzG (`gui/assets/icon.ico`) v okně, taskbaru i EXE.
+- Branding **HanzG** v headeru a log panelu.
+- Nastavení DevPacku, offline porovnání a native-only GUI z řady 0.4.x.
+
+### Changed
+
+- Log příkazů je vždy viditelný panel (více řádků), ne skrytý proužek.
+- Titulek okna: `UID Tool vX.Y.Z · HanzG`.
+
+## [0.4.0] - 2026-09-02
+
+### Added
+
+- GUI záložka **Porovnání**: kód z čtečky (RAW hex) + kód z DB bez nutnosti chipu/PRS.
+- GUI záložka **Nastavení**: cesta k TWN4DevPack520 / novějšímu DevPackxxx.
+- Validace DevPacku pro Jarov build (STD207 + CCx/MCx/NCx).
+- Export FW z GUI používá nastavený DevPack a AppBlaster build pipeline.
+
+### Changed
+
+- GUI běží **jen jako Windows nativní okno** (prohlížeč už není podporován).
+- Výchozí záložka je Porovnání (pro kolegy bez HIL).
+- Návod `docs/NAVOD.md` aktualizován na 0.4.x.
+
+### Removed
+
+- Režim GUI v prohlížeči (`--browser`); `run_gui_browser.bat` jen přesměruje na Windows okno.
+
 ## [0.3.1] - 2026-08-30
 
 ### Added

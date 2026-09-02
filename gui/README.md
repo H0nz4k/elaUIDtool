@@ -1,8 +1,8 @@
-# ELATEC UID Tool – desktopové GUI (NiceGUI)
+# ELATEC UID Tool – Windows desktop GUI (NiceGUI + nativní okno)
 
-Desktopové rozhraní pro analyzátor UID. Volá `elatec_uid_tool` přes `services.py`.
+Desktopová aplikace pro kolegy: offline porovnání kódu z čtečky vs DB, načtení karty přes PRS, sestavení FW (Jarov / STD207).
 
-**Podrobný návod:** [docs/NAVOD.md](../docs/NAVOD.md)
+**Návod:** [docs/NAVOD.md](../docs/NAVOD.md)
 
 ## Spuštění
 
@@ -10,14 +10,18 @@ Desktopové rozhraní pro analyzátor UID. Volá `elatec_uid_tool` přes `servic
 gui\run_gui.bat
 ```
 
-Nebo z menu `elaUIDtool.bat` → volba **4**.
+Nebo `elaUIDtool.bat` → volba **4**.
 
-Prohlížeč: `gui\run_gui_browser.bat`.
+Aplikace běží **jen jako Windows okno** (ne prohlížeč).
 
-## Po shodě
+## Záložky
 
-- karta nejlepší shody (encoding, facility/card),
-- **Vytvořit FW (CDC/UART)** → `FW_elatec/export/out/*.bix`,
-- export JSON, seznam kandidátů.
+1. **Porovnání** – kód z čtečky (RAW hex) + kód z DB → pravidlo + **Vytvořit FW** (bez chipu / bez PRS).
+2. **Načtení karty** – COM + Simple Protocol.
+3. **Čtečka** – info o zařízení.
+4. **Nastavení** – cesta k `TWN4DevPack520` (nebo novějšímu DevPackxxx).
 
-Build bez GUI: `build_fw.bat` v kořeni projektu.
+## DevPack
+
+Výchozí: `elafiles/` nebo `C:\Work\Elatec- reader\TWN4DevPack520`.  
+Pro build FW musí být v DevPacku `Apps/` s `App_STD207_Standard_temp.c` a `TWN4_{C,M,N}Cx520.bix`.

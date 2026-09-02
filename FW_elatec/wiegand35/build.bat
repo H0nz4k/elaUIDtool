@@ -90,7 +90,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
-"%MAKEAPP%" -v4 -tTWN4 -nTWN4 "-i%BASE_BIX%" "-h%HEX%" "-o%BIX%"
+REM -v4 = MultiBIX (nCF + dalsi sloty); -v3 AppBlaster na Nano odmítne
+REM -b0520 = DevPack 5.20 (BCD); jinak: Inconsistent branch version (app)
+"%MAKEAPP%" -v4 -tTWN4 -nTWN4 -b0520 "-i%BASE_BIX%" "-h%HEX%" "-o%BIX%"
 if errorlevel 1 (
     echo makeapp selhal.
     exit /b 1
