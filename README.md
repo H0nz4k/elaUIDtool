@@ -3,17 +3,34 @@
 Windows aplikace pro práci s identifikátory karet na čtečkách **ELATEC TWN4**.
 
 Pomůže ti:
+
 1. **porovnat** kód, který vrací čtečka, s kódem v databázi,
 2. **najít pravidlo** převodu (reverse byte, Wiegand 3+5, …),
 3. **sestavit firmware** (`.bix`) pro čtečku,
-4. volitelně **načíst kartu** přes USB (Simple Protocol / PRS).
+4. volitelně **načíst kartu** přes USB (Simple Protocol / PRS),
 5. **registrovat HF/LF kartu** jedním přiložením, s HEX/DEC zvlášť pro každé pásmo.
 6. **upravit a uložit celý firmware projekt** ve FW builderu, včetně pípání, LED a datových pravidel.
 
 Repozitář: [https://github.com/H0nz4k/elaUIDtool](https://github.com/H0nz4k/elaUIDtool)  
-Podrobný návod: [docs/NAVOD.md](docs/NAVOD.md)
-Registrace pro Jídelnu: [docs/REGISTRATION.md](docs/REGISTRATION.md)
-FW builder: [docs/FW_BUILDER.md](docs/FW_BUILDER.md)
+
+- [Podrobný návod](docs/NAVOD.md)
+- [Registrace pro Jídelnu](docs/REGISTRATION.md)
+- [FW builder](docs/FW_BUILDER.md)
+
+## Nové ve verzi 0.6.0
+
+**FW builder** převezme nejlepší nebo konkrétní vybranou shodu z porovnání
+a vytvoří pravidlo pro další karty. HF a LF mají vlastní konverze a živý náhled
+výstupu. Projekt zahrnuje manipulaci s daty, formát, hlasitost a tón pípání,
+počet a časování pípnutí/bliknutí, LED, technologie i výstupní rozhraní.
+
+Vlastní předvolby a projekt lze uložit do JSON. Export vytvoří **BIX, projekt
+JSON, manifest se SHA-256 a ZIP zdrojů**. Podporuje oba uvedené modely, USB CDC,
+skutečnou USB klávesnici a UART. Zachovaný režim registrace Jídelny zjistí HF/LF
+při jednom přiložení a dvojici odešle **HF → LF**.
+
+Builder pracuje s UID a registrací HF/LF; rozsah a jednotlivé volby najdeš
+v [návodu k FW builderu](docs/FW_BUILDER.md).
 
 ---
 
@@ -51,16 +68,27 @@ U Wiegand 3+5 a PAC **nestačí** standardní AppBlaster Decimal — musíš nah
 ## Požadavky
 
 - **Windows 10/11**
-- **Python 3.10+** (zapni *Add python.exe to PATH*)
+- Pro spuštění ze zdrojů **Python 3.10+** (zapni *Add python.exe to PATH*); hotové EXE Python nepotřebuje
 - Pro sestavení FW: **ELATEC TWN4DevPack520 (5.20)** — proprietární, není v ZIPu
 - Pro načtení karty přes USB: čtečka s firmware **PRS** (Simple Protocol)
 - Před prací s COM **zavři AppBlaster Director** (drží port)
 
 ---
 
-## Instalace (kolegové)
+## Stažení a spuštění Windows EXE
 
-1. Rozbal složku `elaUIDtool-0.5.0` (nebo naklonuj repo).
+Hotový Windows balíček vytváří [GitHub Actions](https://github.com/H0nz4k/elaUIDtool/actions/workflows/checks.yml).
+Otevři poslední úspěšný běh pro `main` s verzí 0.6.0 a stáhni artifact
+**elaUIDtool-win64-gui**. Rozbal **celý ZIP** do jedné složky a spusť
+`elaUIDtool.exe`; složka `_internal` musí zůstat vedle EXE.
+
+Porovnání a náhled fungují bez čtečky a SDK. Pro vytvoření BIX nastav v
+**Nastavení** cestu k vlastnímu DevPacku 5.20. Čtečku potřebuješ až pro
+načtení karty nebo praktický test firmware.
+
+## Instalace ze zdrojů
+
+1. Rozbal složku `elaUIDtool-0.6.0` (nebo naklonuj repo).
 2. Spusť:
 
 ```text
@@ -140,6 +168,20 @@ délku bez přidaných nul. DEC převádí celý UID, bez zkrácení; může mí
 číslic, zatímco Jídelna používá 16 znaků. Podrobný postup a časování najdeš
 v [návodu k registraci](docs/REGISTRATION.md).
 
+### E) FW builder z nalezeného pravidla
+
+1. V **Porovnání** nebo **Načtení karty** najdi shodu s číslem z databáze.
+2. U výsledku použij **Upravit ve FW builderu**. V tabulce kandidátů lze vybrat konkrétní shodu.
+3. Zkontroluj **živý náhled**. HF a LF nastav zvlášť; výchozí HEX zachovává původní délku bez doplnění na 16 znaků.
+4. V **Pípání a LED** nastav signalizaci zapnutí, jednoho čipu, dvojice a chyby.
+5. V **Čtení a výstup** nastav technologie, odebrání/opakování karty, USB/klávesnici nebo UART.
+6. Vyber čtečku podle fotografie. Projekt můžeš uložit jako vlastní předvolbu nebo exportovat do JSON.
+7. **Vytvořit BIX** → ulož obraz a případně projekt/zdroje → nahraj přes AppBlaster.
+
+Pro Jídelnu použij předvolbu **Jídelna · HF + LF**, USB CDC a CR. Výsledné
+identifikátory musí být HEX/DEC do 16 znaků. Obecný UID builder podporuje
+přesné převody až 256 bitů; přesná délka výstupu delší číslo odmítne bez krácení.
+
 ---
 
 ## Ověřené příklady
@@ -188,6 +230,9 @@ v [návodu k registraci](docs/REGISTRATION.md).
 .venv\Scripts\python -m elatec_uid_tool ports
 .venv\Scripts\python -m elatec_uid_tool export-registration-fw --reader-model multitech2-usb --hf-format HEX --lf-format DEC
 .venv\Scripts\python -m elatec_uid_tool test-registration --port COM7
+.venv\Scripts\python -m elatec_uid_tool project-from-match --raw 813F9A04 --expected 049A3F81 --expected-format hexadecimal --tag-type 0x80 --output reader.project.json
+.venv\Scripts\python -m elatec_uid_tool preview-project --project reader.project.json --raw 813F9A04 --band HF
+.venv\Scripts\python -m elatec_uid_tool build-project --project reader.project.json --devpack C:\TWN4DevPack520
 ```
 
 Výstup FW:
@@ -224,7 +269,7 @@ scripts\build_exe.bat
 Výstup:
 
 ```text
-releases\elaUIDtool-0.4.1-win64-gui\elaUIDtool.exe
+releases\elaUIDtool-0.6.0-win64-gui\elaUIDtool.exe
 ```
 
 Spusť `elaUIDtool.exe`. Porovnání funguje ihned. Pro **Vytvořit FW** zkopíruj DevPack520 do `elafiles\` vedle EXE, nebo nastav cestu v GUI → Nastavení.
@@ -236,9 +281,9 @@ scripts\pack_release.bat
 ```
 
 ```text
-releases\elaUIDtool-0.4.1-win64-gui.zip
-releases\elaUIDtool-0.4.1\
-releases\elaUIDtool-0.4.1.zip
+releases\elaUIDtool-0.6.0-win64-gui.zip
+releases\elaUIDtool-0.6.0\
+releases\elaUIDtool-0.6.0.zip
 ```
 
 DevPack se do balíčků nedává (licence ELATEC).
@@ -257,6 +302,8 @@ DevPack se do balíčků nedává (licence ELATEC).
 
 - [CHANGELOG.md](CHANGELOG.md)
 - [docs/NAVOD.md](docs/NAVOD.md)
+- [docs/FW_BUILDER.md](docs/FW_BUILDER.md)
+- [docs/REGISTRATION.md](docs/REGISTRATION.md)
 - [docs/VERSIONING.md](docs/VERSIONING.md)
 - [gui/README.md](gui/README.md)
 
@@ -265,9 +312,11 @@ DevPack se do balíčků nedává (licence ELATEC).
 - ELATEC DevPack a `.bix` image jsou proprietární — do balíčku toolu se nedávají.
 - Automatický flash přes Raspberry zatím není.
 - AppBlaster `.abp` export zatím není.
+- Builder nečte chráněné MIFARE sektory, DESFire soubory ani LEGIC segmenty a nespravuje klíče, OSDP nebo BLE.
+- Firmware 0.6.0 prošel testy a skutečným sestavením; nové volby je potřeba prakticky ověřit na čtečce.
 
 ---
 
 ## Changelog
 
-Viz [CHANGELOG.md](CHANGELOG.md). Aktuální verze: **0.4.1**.
+Viz [CHANGELOG.md](CHANGELOG.md). Aktuální verze: **0.6.0**.
