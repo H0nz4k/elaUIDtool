@@ -16,7 +16,7 @@ a = Analysis(
     ['gui/app.py'],
     pathex=['src', 'gui'],
     binaries=binaries,
-    datas=datas + [('gui/assets/icon.ico', 'assets'), ('gui/assets/icon.png', 'assets')],
+    datas=datas + [('gui/assets', 'assets'), ('src/elatec_uid_tool/fw_templates', 'elatec_uid_tool/fw_templates')],
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},

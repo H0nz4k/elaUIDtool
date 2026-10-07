@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .analyzer import MatchCandidate, analyze_uid, normalize_raw_hex
 from .fw_export import HostChannel, build_firmware, export_channels, match_summary
+from .registration_commands import toolchain_from_args
 
 
 def _match_from_dict(data: dict) -> MatchCandidate:
@@ -99,6 +100,8 @@ def command_export_fw(args) -> int:
         output_dir=Path(args.output_dir) if args.output_dir else None,
         base_bix=Path(args.base_bix) if getattr(args, "base_bix", None) else None,
         branch=getattr(args, "branch", "0520"),
+        reader_model=getattr(args, "reader_model", None),
+        toolchain=toolchain_from_args(args),
     )
     for item in results:
         print(f"[{item.channel.upper()}]")

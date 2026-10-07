@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import argparse
 from collections import deque
 from datetime import datetime
 import multiprocessing
@@ -26,6 +27,9 @@ if SRC.exists() and str(SRC) not in sys.path:
 
 from elatec_uid_tool import __version__  # noqa: E402
 from elatec_uid_tool.protocol import ElatecError  # noqa: E402
+from firmware_ui import choose_reader, show_bix_result  # noqa: E402
+from registration_tab import build_registration_tab  # noqa: E402
+from builder_tab import build_builder_tab  # noqa: E402
 
 from services import (  # noqa: E402
     CaptureResult,
@@ -56,6 +60,7 @@ def log_add(text: str) -> None:
 class State:
     last_capture: CaptureResult | None = None
     last_offline: dict | None = None
+    fw_builder = None
 
 
 state = State()
@@ -63,6 +68,8 @@ state = State()
 TABS = [
     ("compare", "compare_arrows", "Porovnání"),
     ("capture", "contactless", "Načtení karty"),
+    ("registration", "badge", "Registrace HF/LF"),
+    ("builder", "tune", "FW builder"),
     ("reader", "usb", "Čtečka"),
     ("settings", "settings", "Nastavení"),
 ]
@@ -132,8 +139,9 @@ def encoding_badge(enc: str | None) -> str:
     return "plain"
 
 
-async def refresh_ports(sel: ui.select) -> None:
-    log_add("Obnovuji porty…")
+async def refresh_ports(sel: ui.select, *, quiet: bool = False) -> None:
+    if not quiet:
+        log_add("Obnovuji porty…")
     try:
         entries, rec = await run_io(list_ports)
     except ElatecError as exc:
@@ -142,17 +150,20 @@ async def refresh_ports(sel: ui.select) -> None:
     if not entries:
         sel.options = {}
         sel.value = None
-        notify_err("Žádný sériový port nenalezen.")
+        if not quiet:
+            notify_err("Žádný sériový port nenalezen.")
         return
     sel.options = {
         e.device: port_label(e.device, e.description, e.is_probable_elatec)
         for e in entries
     }
     sel.value = entries[rec].device if rec is not None else entries[0].device
-    log_add(f"Porty: {list(sel.options.keys())}")
+    if not quiet:
+        log_add(f"Porty: {list(sel.options.keys())}")
 
 
-def best_match_card(m: dict, *, tag_type: int | None = None) -> None:
+def best_match_card(m: dict, *, tag_type: int | None = None, raw_hex: str | None = None,
+                    bit_count: int | None = None) -> None:
     with ui.card().classes(f"{CARD} border-primary/30 bg-blue-50"):
         with ui.row().classes("items-center gap-2 mb-2"):
             ui.icon("check_circle", size="xs").classes("text-positive")
@@ -188,21 +199,29 @@ def best_match_card(m: dict, *, tag_type: int | None = None) -> None:
         ui.separator().classes("my-3")
         ui.label("Firmware pro čtečku").classes(SEC)
         ui.label(
-            "Sestaví .bix stejným způsobem jako Jarov "
-            "(STD207 + appconfig + CCx/MCx/NCx). Cestu k DevPacku nastavíte v Nastavení."
+            "Vyber model čtečky a sestav .bix pro nalezené převodní pravidlo. "
+            "Cestu k DevPacku 5.20 nastavíš v Nastavení."
         ).classes("text-caption text-grey-7 mb-2")
 
         async def make_fw(channel: str, match=m, tt=tag_type) -> None:
+            model = await choose_reader()
+            if model is None:
+                return
             try:
                 path = await run_io(
-                    export_firmware_bix, match, channel, tag_type=tt
+                    export_firmware_bix, match, channel, tag_type=tt, reader_model=model
                 )
                 notify_ok(f"FW hotovo ({channel.upper()}): {path.name}")
                 log_add(f"BIX → {path}")
+                await show_bix_result(path)
             except Exception as exc:
                 notify_err(str(exc))
 
         with ui.row().classes("gap-2 flex-wrap"):
+            ui.button(
+                "Upravit ve FW builderu", icon="tune",
+                on_click=lambda: state.fw_builder.use_match(m, tag_type, raw_hex, bit_count),
+            ).props("color=primary")
             ui.button(
                 "Vytvořit FW (CDC)",
                 icon="usb",
@@ -318,13 +337,23 @@ def build_compare_tab() -> None:
         def all_table_content() -> None:
             if not all_state["matches"]:
                 return
-            ui.table(
+            table = ui.table(
                 columns=_CAND_COLS,
                 rows=_candidates_rows(all_state["matches"]),
                 row_key="n",
+                selection="single",
             ).props("dense flat bordered virtual-scroll").classes("w-full").style(
-                "height: calc(100vh - 80px);"
+                "height: calc(100vh - 160px);"
             )
+            def use_selected():
+                if not table.selected:
+                    notify_err("Vyber kandidáta v tabulce.")
+                    return
+                index = int(table.selected[0]["n"]) - 1
+                context = all_state["context"]
+                all_dlg.close()
+                state.fw_builder.use_match(all_state["matches"][index], *context)
+            ui.button("Upravit vybraný ve FW builderu", icon="tune", on_click=use_selected).classes("mt-2")
 
         with ui.element("div").classes("w-full flex-grow overflow-hidden px-4"):
             all_table_content()
@@ -353,6 +382,7 @@ def build_compare_tab() -> None:
             d = await run_io(run_offline_analysis, raw, bits, exp, fmt_sel.value)
             state.last_offline = d
             matches = d["matches"]
+            all_state["context"] = (tag_type, d["raw_hex"], d["bit_count"])
             log_add(f"← {len(matches)} kandidátů")
 
             with result_area:
@@ -366,7 +396,7 @@ def build_compare_tab() -> None:
                         ]
                     )
                 if matches:
-                    best_match_card(matches[0], tag_type=tag_type)
+                    best_match_card(matches[0], tag_type=tag_type, raw_hex=d["raw_hex"], bit_count=d["bit_count"])
                     if len(matches) > 1:
                         ui.button(
                             f"Zobrazit všechny ({len(matches)})",
@@ -452,7 +482,7 @@ def build_reader_tab() -> None:
             load_btn.enable()
 
     load_btn.on("click", do_load)
-    ui.timer(0.4, lambda: refresh_ports(port_sel), once=True)
+    ui.timer(0.4, lambda: refresh_ports(port_sel, quiet=True), once=True)
 
 
 def _render_reader_result(d: dict) -> None:
@@ -533,13 +563,23 @@ def build_capture_tab() -> None:
         def cand_table_content() -> None:
             if not cand_state["matches"]:
                 return
-            ui.table(
+            table = ui.table(
                 columns=_CAND_COLS,
                 rows=_candidates_rows(cand_state["matches"]),
                 row_key="n",
+                selection="single",
             ).props("dense flat bordered virtual-scroll").classes("w-full").style(
-                "height: calc(100vh - 80px);"
+                "height: calc(100vh - 160px);"
             )
+            def use_selected():
+                if not table.selected:
+                    notify_err("Vyber kandidáta v tabulce.")
+                    return
+                index = int(table.selected[0]["n"]) - 1
+                context = cand_state["context"]
+                cand_dlg.close()
+                state.fw_builder.use_match(cand_state["matches"][index], *context)
+            ui.button("Upravit vybraný ve FW builderu", icon="tune", on_click=use_selected).classes("mt-2")
 
         with ui.element("div").classes("w-full flex-grow overflow-hidden px-4"):
             cand_table_content()
@@ -580,6 +620,7 @@ def build_capture_tab() -> None:
             state.last_capture = result
             d = capture_result_to_dict(result)
             matches = d["matches"]
+            cand_state["context"] = (parse_tag_type(d["card"].get("tag_type")), d["card"]["raw_id_hex"], d["card"]["raw_bit_count"])
             log_add(f"← {len(matches)} kandidátů")
             status_lbl.text = ""
 
@@ -602,6 +643,7 @@ def build_capture_tab() -> None:
                     best_match_card(
                         matches[0],
                         tag_type=parse_tag_type(d["card"].get("tag_type")),
+                        raw_hex=d["card"]["raw_id_hex"], bit_count=d["card"]["raw_bit_count"],
                     )
 
                     with ui.row().classes("gap-2 flex-wrap"):
@@ -658,7 +700,7 @@ def build_capture_tab() -> None:
             on_click=do_capture,
         ).props("color=primary unelevated")
 
-    ui.timer(0.4, lambda: refresh_ports(port_sel), once=True)
+    ui.timer(0.4, lambda: refresh_ports(port_sel, quiet=True), once=True)
 
 
 # ── Záložka: Nastavení ────────────────────────────────────────────────────────
@@ -668,9 +710,8 @@ def build_settings_tab() -> None:
         ui.label("TWN4 Developer Pack").classes(SEC)
         ui.separator().classes("my-1")
         ui.label(
-            "Výchozí je TWN4DevPack520 (složka elafiles/ nebo instalace DevPacku). "
-            "Pro novější DevPackxxx změň cestu níže – musí obsahovat Tools/ a Apps/ "
-            "s CCx/MCx/NCx a App_STD207_Standard_temp.c."
+            "Použij TWN4DevPack520 (5.20): složku obsahující Tools/, Apps/ a Firmware/. "
+            "Podporovaný je původní balík ELATEC i připravené CCx/MCx/NCx obrazy."
         ).classes("text-body2 text-grey-8")
 
     path_in = ui.input(
@@ -702,7 +743,8 @@ def build_settings_tab() -> None:
             if window is None:
                 notify_err("Okno není připravené – cestu zadej ručně.")
                 return
-            files = await window.create_file_dialog(dialog_type=2)
+            from webview import FileDialog
+            files = await window.create_file_dialog(dialog_type=FileDialog.FOLDER)
         except Exception as exc:
             notify_err(
                 "Výběr složky selhal – cestu zadej ručně do pole.\n"
@@ -901,6 +943,20 @@ def main_page() -> None:
 
             with ui.column().classes(
                 "w-full max-w-3xl mx-auto gap-3 hidden"
+            ) as p_registration:
+                build_registration_tab(refresh_ports=refresh_ports, run_io=run_io, log_add=log_add,
+                                       notify_ok=notify_ok, notify_err=notify_err)
+            tab_panels["registration"] = p_registration
+
+            with ui.column().classes(
+                "w-full max-w-5xl mx-auto gap-3 hidden"
+            ) as p_builder:
+                state.fw_builder = build_builder_tab(run_io=run_io, notify_ok=notify_ok, notify_err=notify_err,
+                                                     log_add=log_add, switch_tab=switch_tab)
+            tab_panels["builder"] = p_builder
+
+            with ui.column().classes(
+                "w-full max-w-3xl mx-auto gap-3 hidden"
             ) as p_reader:
                 build_reader_tab()
             tab_panels["reader"] = p_reader
@@ -910,6 +966,9 @@ def main_page() -> None:
             ) as p_settings:
                 build_settings_tab()
             tab_panels["settings"] = p_settings
+
+        # Synchronize visibility state as well as the initial CSS classes.
+        switch_tab(DEFAULT_TAB)
 
         with ui.column().classes(
             "w-full shrink-0 border-t border-grey-8 bg-grey-10"
@@ -965,6 +1024,10 @@ def _icon_path() -> Path:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="elaUIDtool desktop")
+    parser.add_argument("--browser", action="store_true", help="Otevřít rozhraní v prohlížeči")
+    parser.add_argument("--port", type=int, default=None, help="HTTP port při ověřování GUI")
+    args = parser.parse_args()
     # Native args musí být nastaveny PŘED freeze_support (PyInstaller subprocess).
     icon = _icon_path()
     app.native.window_args.update(
@@ -980,10 +1043,11 @@ def main() -> None:
         title=f"UID Tool v{__version__} · HanzG",
         favicon=str(icon) if icon.is_file() else "📡",
         reload=False,
-        native=True,
-        window_size=(1100, 780),
-        show=False,
-        port=native.find_open_port(),
+        native=not args.browser,
+        window_size=None if args.browser else (1100, 780),
+        show=args.browser,
+        host="127.0.0.1",
+        port=args.port or native.find_open_port(),
         storage_secret="uid-tool-gui",
     )
 

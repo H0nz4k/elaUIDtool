@@ -184,6 +184,7 @@ def export_firmware_bix(
     *,
     tag_type: int | None = None,
     devpack: Path | None = None,
+    reader_model: str | None = None,
 ) -> Path:
     from settings_store import get_devpack_path, validate_devpack
 
@@ -202,8 +203,24 @@ def export_firmware_bix(
         channel=channel,
         tag_type=tag_type,
         devpack=pack,
+        reader_model=reader_model,
     )
     return result.bix_path
+
+
+def export_registration_bix(config, reader_model: str, *, devpack: Path | None = None) -> Path:
+    from settings_store import get_devpack_path
+    from elatec_uid_tool.registration import build_registration_firmware
+    from elatec_uid_tool.twn4_build import validate_devpack
+
+    pack = (devpack or get_devpack_path()).resolve()
+    missing = validate_devpack(pack, standard=False)
+    if missing:
+        raise ElatecError(
+            f"DevPack 5.20 není kompletní: {pack}\n" + "\n".join(missing)
+            + "\nCestu nastav v záložce Nastavení."
+        )
+    return build_registration_firmware(config, reader_model=reader_model, devpack=pack).bix_path
 
 
 def run_offline_analysis(

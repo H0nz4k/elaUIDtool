@@ -35,7 +35,7 @@ if errorlevel 1 goto :error
 
 mkdir "%OUT%\elafiles" 2>nul
 (
-echo Sem zkopiruj TWN4DevPack520 ^(Tools + Apps CCx/MCx/NCx^).
+echo Sem zkopiruj puvodni TWN4DevPack520 ^(Tools + Apps + Firmware^).
 echo Nebo v GUI - Nastaveni zadej cestu k DevPacku.
 echo Bez DevPacku funguje Porovnani a nacteni karty; Vytvorit FW ne.
 ) > "%OUT%\elafiles\README.txt"
@@ -50,6 +50,8 @@ echo Pro Vytvorit FW zkopiruj DevPack520 do slozky elafiles vedle EXE
 echo nebo nastav cestu v GUI - Nastaveni.
 echo.
 echo Vystup FW: FW_elatec\export\out\ vedle EXE.
+echo Registrace HF/LF: zvol model a HEX/DEC zvlast pro HF a LF.
+echo Vystup registracniho FW: FW_elatec\export\registration\ vedle EXE.
 ) > "%OUT%\START_HERE.txt"
 
 echo.

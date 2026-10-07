@@ -6,6 +6,49 @@ a verzování používá [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-07
+
+### Added
+
+- FW builder pro UID konverze i registraci HF/LF, s převzetím nejlepší nebo vybrané nalezené shody.
+- Samostatná pravidla HF/LF: reverze bitů/bajtů, bitové okno, AND/XOR, Wiegand/PAC/H10301, HEX/DEC/BIN/OCT/ASCII, délka, prefix/suffix a oddělovač.
+- Konverzní a projektové předvolby, vlastní uložené profily, import/export JSON a živý náhled skutečných výstupních bajtů.
+- Signalizace startup/jeden čip/dvojice/chyba: hlasitost, frekvence, počty pípnutí/bliknutí, barva a časování LED.
+- CDC, USB klávesnice s pravými Keyboard OS obrazy, UART parametry, USB sériové číslo/wakeup, výběr technologií, odebrání a opakování.
+- Výstup BLD0.60 s upravitelným projektem, manifestem, SHA-256 a ZIP zdrojů bez SDK; CLI build-project/preview-project/project-from-match.
+- Přenosný C převodník do 256 bitů a test shody s náhledem/analyzátorem; reálné SDK buildy pro oba modely a rozhraní.
+
+### Fixed
+
+- Původní STD export aplikuje reverzi i vybrané bity také u plain HEX/DEC; strukturované payloady používají spodních 24 bitů jako analyzátor.
+- Zdrojový release balíček vylučuje všechny lokálně generované firmware projekty a buildy.
+
+
+## [0.5.0] - 2026-10-07
+
+### Added
+
+- Režim **Registrace HF/LF**: jedno přiložení, automatická detekce HF+LF / jen HF / jen LF a výstup HF před LF.
+- Nezávislá volba celého UID v HEX nebo DEC pro každé pásmo; bez doplnění na 16 znaků a bez zkracování.
+- Export registračního firmware D2R0.15 pro **TWN4 MULTITECH 2 USB** a **TWN4 MULTITECH 3 M LF HF**, s fotografiemi obou modelů a uložením BIX.
+- Test jedné karty bez databáze: skutečné sériové rámce, pořadí a zavření/znovuotevření COM jako v Jídelně, možnost test zastavit.
+- CLI `export-registration-fw`, `test-registration`, volba modelu v původním `export-fw`.
+- Testy registrace, všech kombinací formátů, SDK adaptéru a volitelně skutečných BIX; automatické kontroly a Windows GUI artifact v GitHub Actions.
+
+### Changed
+
+- Sestavení obou režimů přijímá původní Developer Pack 5.20; Multi CDC základ se rozbalí na tři nezměněné systémové obrazy.
+- BIX se zveřejní až po úspěšném sestavení a ověření systémových obrazů, s názvem modelu/formátů a JSON konfigurací + SHA-256.
+- Fotografie i zdroje registračního firmware jsou zahrnuté v Python balíčku / Windows EXE. Nastavení modelu a formátů se ukládá.
+- Volitelný `gui/app.py --browser` pro kontrolu rozhraní; výchozí spuštění zůstává nativní Windows okno.
+
+### Fixed
+
+- Převodní firmware testuje skutečný kód typu tagu, nikoli bitovou masku aplikovanou na jeho číselný typ.
+- Dialogy složky a uložení používají pojmenované konstanty pywebview, kompatibilní s aktuální verzí.
+- Přepínání záložek synchronizuje počáteční skrytí s viditelností prvků.
+
+
 ## [0.4.1] - 2026-09-02
 
 ### Added
