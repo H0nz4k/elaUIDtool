@@ -24,6 +24,8 @@ from .ports import (
 from .protocol import enumerate_ports
 from .presentation import print_matches
 from .protocol import ElatecError
+from .reader_models import DEFAULT_READER_MODEL, READER_MODELS
+from .registration_commands import command_export_registration, command_test_registration
 
 
 def select_port_interactively(timeout: float = 1.2) -> str:
@@ -126,11 +128,32 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--branch",
         default="0520",
-        help="makeapp -b větev DevPacku BCD (0520=5.20, 0620=6.20)",
+        help="Větev DevPacku BCD; tento export podporuje 0520 (5.20)",
     )
     p.add_argument("--output-dir", default="FW_elatec/export/out")
     p.add_argument("--max-results", type=int, default=50)
+    p.add_argument("--reader-model", choices=[model.key for model in READER_MODELS], default=None)
+    p.add_argument("--gcc", help="Volitelná cesta k ARM GCC")
+    p.add_argument("--objcopy", help="Volitelná cesta k ARM objcopy")
+    p.add_argument("--makeapp-runtime", help="Na Linuxu cesta k mono")
     p.set_defaults(func=command_export_fw)
+
+    p = sub.add_parser("export-registration-fw", help="Sestaví automatickou registraci HF/LF (USB CDC).")
+    p.add_argument("--reader-model", choices=[model.key for model in READER_MODELS], default=DEFAULT_READER_MODEL)
+    p.add_argument("--hf-format", choices=("HEX", "DEC"), default="HEX", type=str.upper)
+    p.add_argument("--lf-format", choices=("HEX", "DEC"), default="HEX", type=str.upper)
+    p.add_argument("--other-search-ms", type=int, default=2000)
+    p.add_argument("--devpack", default="elafiles")
+    p.add_argument("--output-dir")
+    p.add_argument("--gcc")
+    p.add_argument("--objcopy")
+    p.add_argument("--makeapp-runtime", help="Na Linuxu cesta k mono")
+    p.set_defaults(func=command_export_registration)
+
+    p = sub.add_parser("test-registration", help="Ověří jednu kartu s registračním D2R firmware; bez DB.")
+    p.add_argument("--port", required=True)
+    p.add_argument("--wait", type=float, default=30)
+    p.set_defaults(func=command_test_registration)
     return parser
 
 

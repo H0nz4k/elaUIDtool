@@ -28,6 +28,18 @@ class SettingsStoreTests(unittest.TestCase):
             self.assertIn("Tools/makeapp.exe", missing)
             self.assertIn("Apps/TWN4_NCx520.bix", missing)
 
+    def test_registration_choices_roundtrip_preserves_devpack(self):
+        original = settings_store.SETTINGS_PATH
+        with tempfile.TemporaryDirectory() as tmp:
+            settings_store.SETTINGS_PATH = Path(tmp) / "user_settings.json"
+            try:
+                settings_store.set_devpack_path(tmp)
+                saved = settings_store.set_registration_settings("multitech3-m-lf-hf", "DEC", "HEX", 1500)
+                self.assertEqual(settings_store.get_registration_settings(), saved)
+                self.assertEqual(settings_store.get_devpack_path(), Path(tmp).resolve())
+            finally:
+                settings_store.SETTINGS_PATH = original
+
 
 if __name__ == "__main__":
     unittest.main()

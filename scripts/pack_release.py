@@ -27,6 +27,7 @@ INCLUDE_FILES = (
     "CONTRIBUTING.md",
     "pyproject.toml",
     "requirements.txt",
+    "elaUIDtool.spec",
     "elaUIDtool.bat",
     "install_windows.bat",
     "build_fw.bat",
@@ -141,6 +142,20 @@ elafiles\\Apps\\TWN4_CCx520.bix
 elafiles\\Apps\\TWN4_MCx520.bix
 elafiles\\Apps\\TWN4_NCx520.bix
 ```
+
+Podporovaný je také původní balík ELATEC se soubory
+`Apps/Samples/Standard/App_STD207_Standard.c` a
+`Firmware/TWN4_xCx520_STD207_Multi_CDC_Standard.bix`.
+
+## Registrace HF/LF
+
+V GUI otevři **Registrace HF/LF**, vyber čtečku (MultiTech 2 USB nebo
+MultiTech 3 M LF HF) a samostatný výstup HEX/DEC pro HF a LF. Tlačítko
+**Vytvořit registrační BIX** sestaví firmware pro AppBlaster. Po nahrání
+ověř jednu kartu tlačítkem **Otestovat jednu kartu**; Jídelna musí být zavřená.
+
+Jeden tag se odešle jednou, dva tagy v pořadí HF → LF, bez přidaných nul.
+Podrobnosti: `docs/REGISTRATION.md`.
 
 ## 5. Nahrání FW
 

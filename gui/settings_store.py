@@ -61,20 +61,35 @@ def set_devpack_path(path: str | Path) -> Path:
 
 def validate_devpack(path: Path) -> list[str]:
     """Vrátí seznam chybějících položek (prázdné = OK)."""
-    missing: list[str] = []
-    checks = [
-        ("Tools/makeapp.exe", path / "Tools" / "makeapp.exe"),
-        (
-            "Tools/Yagarto-20110328/bin/arm-none-eabi-gcc.exe",
-            path / "Tools" / "Yagarto-20110328" / "bin" / "arm-none-eabi-gcc.exe",
-        ),
-        ("Tools/sys/libapp.a", path / "Tools" / "sys" / "libapp.a"),
-        ("Apps/App_STD207_Standard_temp.c", path / "Apps" / "App_STD207_Standard_temp.c"),
-        ("Apps/TWN4_CCx520.bix", path / "Apps" / "TWN4_CCx520.bix"),
-        ("Apps/TWN4_MCx520.bix", path / "Apps" / "TWN4_MCx520.bix"),
-        ("Apps/TWN4_NCx520.bix", path / "Apps" / "TWN4_NCx520.bix"),
-    ]
-    for label, item in checks:
-        if not item.exists():
-            missing.append(label)
-    return missing
+    from elatec_uid_tool.twn4_build import validate_devpack as validate
+
+    return validate(path)
+
+
+def get_registration_settings() -> dict:
+    from elatec_uid_tool.reader_models import DEFAULT_READER_MODEL, get_reader_model
+    from elatec_uid_tool.registration import RegistrationConfig
+
+    raw = load_settings().get("registration") or {}
+    try:
+        config = RegistrationConfig(raw.get("hf_format", "HEX"), raw.get("lf_format", "HEX"),
+                                    raw.get("other_search_ms", 2000))
+        model = get_reader_model(raw.get("reader_model", DEFAULT_READER_MODEL))
+    except (ValueError, TypeError, AttributeError):
+        config = RegistrationConfig()
+        model = get_reader_model(DEFAULT_READER_MODEL)
+    return {"reader_model": model.key, "hf_format": config.hf_format,
+            "lf_format": config.lf_format, "other_search_ms": config.other_search_ms}
+
+
+def set_registration_settings(model: str, hf_format: str, lf_format: str, other_search_ms: int) -> dict:
+    from elatec_uid_tool.reader_models import get_reader_model
+    from elatec_uid_tool.registration import RegistrationConfig
+
+    config = RegistrationConfig(hf_format, lf_format, other_search_ms)
+    value = {"reader_model": get_reader_model(model).key, "hf_format": config.hf_format,
+             "lf_format": config.lf_format, "other_search_ms": config.other_search_ms}
+    data = load_settings()
+    data["registration"] = value
+    save_settings(data)
+    return value

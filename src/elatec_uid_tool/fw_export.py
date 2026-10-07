@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import shutil
-import subprocess
 import textwrap
 from typing import Literal
 
@@ -161,9 +160,11 @@ def _format_block_structured(encoding: str) -> str:
 
 
 def _tag_type_guard(tag_type: int | None) -> str:
-    if tag_type is None or tag_type == 0x80:
+    if tag_type is None:
+        return "if (TagType != HFTAG_MIFARE && TagType != LFTAG_EM4102)\n        return false;"
+    if tag_type == 0x80:
         return "if (TagType != HFTAG_MIFARE)\n        return false;"
-    return f"if (!(TagType & TAGMASK(0x{tag_type:02X})))\n        return false;"
+    return f"if (TagType != 0x{tag_type:02X})\n        return false;"
 
 
 def _host_channel_setup(channel: HostChannel) -> tuple[str, str]:
@@ -682,107 +683,20 @@ int main(void)
 """
 
 
-_DEFAULT_BASE_BIX_NAME = "TWN4_xCx520_STD207_Multi_CDC_Standard.bix"
-_STD_TEMPLATE_NAME = "App_STD207_Standard_temp.c"
-_FAMILY_BIX_NAMES = (
-    "TWN4_CCx520.bix",
-    "TWN4_MCx520.bix",
-    "TWN4_NCx520.bix",
-)
-
-
-def _resolve_std_template(devpack: Path) -> Path:
-    for directory in (devpack / "Apps", EXPORT_DIR / "out"):
-        path = directory / _STD_TEMPLATE_NAME
-        if path.exists():
-            return path.resolve()
-    raise FileNotFoundError(
-        f"Chybí {_STD_TEMPLATE_NAME}. "
-        f"Zkopíruj z DevPack520/Apps do elafiles/Apps/."
-    )
-
-
-def _resolve_family_bixes(devpack: Path) -> list[Path] | None:
-    """AppBlaster 520: makeapp -i CCx -i MCx -i NCx (stejně jako 480)."""
-    search_dirs = [
-        devpack / "Apps",
-        devpack / "Firmware",
-        EXPORT_DIR / "out",
-    ]
-    found: list[Path] = []
-    for name in _FAMILY_BIX_NAMES:
-        hit = next((d / name for d in search_dirs if (d / name).exists()), None)
-        if hit is None:
-            return None
-        found.append(hit.resolve())
-    return found
-
-
 def _makeapp_input_bixes(devpack: Path, base: Path, work_dir: Path) -> list[Path]:
-    families = _resolve_family_bixes(devpack)
-    if not families:
-        return [base]
-    staged: list[Path] = []
-    for src in families:
-        dst = work_dir / src.name
-        shutil.copy2(src, dst)
-        staged.append(dst)
+    """Kompatibilní helper; MultiBIX se rozdělí na tři nezměněné OS obrazy."""
+    from .bix_container import extract_system_images
+    from .twn4_build import resolve_inputs
+
+    inputs = resolve_inputs(devpack, base if base.is_file() else None)
+    if len(inputs) == 1:
+        return extract_system_images(inputs[0], work_dir)
+    staged = []
+    for path in inputs:
+        destination = work_dir / path.name
+        shutil.copy2(path, destination)
+        staged.append(destination)
     return staged
-
-
-def _resolve_base_bix(devpack: Path, base_bix: Path | None = None) -> Path:
-    """Vybere base .bix: explicitní cesta, jinak xCx520 Multi CDC Standard."""
-    if base_bix is not None:
-        path = base_bix.resolve()
-        if not path.exists():
-            raise FileNotFoundError(f"Base .bix neexistuje: {path}")
-        return path
-
-    path = (devpack / "Firmware" / _DEFAULT_BASE_BIX_NAME).resolve()
-    if path.exists():
-        return path
-
-    raise FileNotFoundError(
-        f"Chybí base Standard .bix: {path}. "
-        f"Očekává se {_DEFAULT_BASE_BIX_NAME} v DevPacku Firmware/."
-    )
-
-
-def _infer_family_prefix(base_bix: Path) -> str:
-    name = base_bix.name
-    for token in ("xCx520", "xKx520", "CCx520", "MCx520"):
-        if token.lower() in name.lower():
-            idx = name.lower().index(token.lower())
-            return name[idx : idx + len(token)]
-    return "xCx520"
-
-
-def _toolchain(
-    devpack: Path,
-    *,
-    base_bix: Path | None = None,
-) -> dict[str, Path | str]:
-    tools = devpack / "Tools"
-    base = _resolve_base_bix(devpack, base_bix)
-    paths: dict[str, Path | str] = {
-        "gcc": tools / "Yagarto-20110328" / "bin" / "arm-none-eabi-gcc.exe",
-        "objcopy": tools / "Yagarto-20110328" / "bin" / "arm-none-eabi-objcopy.exe",
-        "makeapp": tools / "makeapp.exe",
-        "sys": tools / "sys",
-        "base_bix": base,
-        "family": _infer_family_prefix(base),
-    }
-    missing = [
-        name
-        for name, path in paths.items()
-        if name != "family" and isinstance(path, Path) and not path.exists()
-    ]
-    if missing:
-        raise FileNotFoundError(
-            "Chybí součásti DevPacku: "
-            + ", ".join(f"{m}={paths[m]}" for m in missing)
-        )
-    return paths
 
 
 def build_firmware(
@@ -796,121 +710,41 @@ def build_firmware(
     branch: str = "0520",
     app_chars: str = "EXP",
     app_version: int = 0x201,
+    reader_model: str | None = None,
+    toolchain=None,
 ) -> FirmwareExportResult:
-    """Vygeneruje appconfig.c/h, sestaví přes STD207 + makeapp CCx/MCx/NCx."""
+    """Sestaví původní převodní režim pro oba modely, s původním STD207."""
+    from .reader_models import get_reader_model
+    from .twn4_build import build_user_app, resolve_std_template
+
+    if channel not in ("cdc", "uart"):
+        raise ValueError(f"Neplatný kanál: {channel}")
+    model = get_reader_model(reader_model) if reader_model is not None else None
     pack = (devpack or DEFAULT_DEVPACK).resolve()
-    out = (output_dir or (EXPORT_DIR / "out")).resolve()
-    out.mkdir(parents=True, exist_ok=True)
-    tools = _toolchain(pack, base_bix=base_bix)
-    family = str(tools["family"])
-    std_template = _resolve_std_template(pack)
-    branch_hex = branch.strip().lower().removeprefix("0x")
-    if len(branch_hex) == 3:
-        branch_hex = "0" + branch_hex
-
-    suffix = channel.upper()
-    appconfig_c = out / "appconfig.c"
-    appconfig_h = out / "appconfig.h"
-    elf = out / f"App_{app_chars}_{suffix}.elf"
-    hex_path = out / f"App_{app_chars}_{suffix}.hex"
-    map_path = out / f"App_{app_chars}_{suffix}.map"
-    lst_path = out / f"App_{app_chars}_{suffix}.lst"
-    bix = out / f"TWN4_{family}_{app_chars}_{suffix}.bix"
-
-    appconfig_c.write_text(
-        generate_appconfig_c(match, channel=channel, tag_type=tag_type),
-        encoding="utf-8",
-        newline="\n",
+    out = (output_dir or EXPORT_DIR / "out").resolve()
+    if model:
+        out = out / model.key / channel
+    name = f"TWN4_xCx520_{app_chars}_{channel.upper()}"
+    if model:
+        name += "_" + model.key
+    result = build_user_app(
+        pack=pack, output_dir=out, name=name, app_chars=app_chars, app_version=app_version,
+        files={
+            "appconfig.c": generate_appconfig_c(match, channel=channel, tag_type=tag_type),
+            "appconfig.h": generate_appconfig_h(match, tag_type=tag_type),
+        },
+        sources=["appconfig.c"], external_sources=(resolve_std_template(pack),),
+        defines=("APPEXTCONFIG=1",), base_bix=base_bix, branch=branch, options=toolchain,
+        metadata={"mode": "conversion", "channel": channel, "match": match_summary(match),
+                  "reader_model": model.name if model else "TWN4 Multi"},
     )
-    appconfig_h.write_text(
-        generate_appconfig_h(match, tag_type=tag_type),
-        encoding="utf-8",
-        newline="\n",
-    )
-
-    sys_dir = Path(str(tools["sys"]))
-    gcc_cmd = [
-        str(tools["gcc"]),
-        "-std=c99",
-        "-mcpu=cortex-m0",
-        "-Os",
-        "-ffunction-sections",
-        "-gdwarf-2",
-        "-mthumb",
-        "-fomit-frame-pointer",
-        "-Wall",
-        "-Wstrict-prototypes",
-        f"-Wa,-ahlms={lst_path}",
-        f"-DAPPCHARS={app_chars}",
-        f"-DAPPVERSION=0x{app_version:03X}",
-        f"-DVERSION=0x{app_version:03X}",
-        "-DAPPEXTCONFIG=1",
-        f"-I{out}",
-        f"-I{sys_dir}",
-        str(sys_dir / "twn4.crt.c"),
-        str(std_template),
-        str(appconfig_c),
-        "-nostartfiles",
-        f"-T{sys_dir / 'app.ld'}",
-        f"-Wl,--gc-sections,-e,AppHeader,--no-print-gc-sections,-Map={map_path},--cref,--no-warn-mismatch",
-        str(sys_dir / "libapp.a"),
-        "-lc",
-        "-o",
-        str(elf),
-    ]
-    result = subprocess.run(gcc_cmd, capture_output=True, text=True, cwd=out)
-    if result.returncode != 0:
-        raise RuntimeError(
-            "GCC selhal při sestavení FW.\n"
-            + (result.stderr or result.stdout or "")
-        )
-
-    obj = subprocess.run(
-        [str(tools["objcopy"]), "-O", "ihex", str(elf), str(hex_path)],
-        capture_output=True,
-        text=True,
-    )
-    if obj.returncode != 0:
-        raise RuntimeError("objcopy selhal.\n" + (obj.stderr or obj.stdout or ""))
-
-    inputs = _makeapp_input_bixes(pack, Path(str(tools["base_bix"])), out)
-    make = subprocess.run(
-        [
-            str(tools["makeapp"]),
-            "-v4",
-            "-tTWN4",
-            "-nTWN4",
-            f"-b{branch_hex}",
-            *[f"-i{path}" for path in inputs],
-            f"-h{hex_path}",
-            f"-o{bix}",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if make.returncode != 0:
-        raise RuntimeError("makeapp selhal.\n" + (make.stderr or make.stdout or ""))
-
-    packed = bix.read_bytes()
-    if packed.count(b"flashinfo") < 3 or b"nCFmi" not in packed:
-        raise RuntimeError(
-            "makeapp nevytvořil MultiBIX (CCx+MCx+NCx). "
-            "Očekává se elafiles/Apps/TWN4_{C,M,N}Cx520.bix."
-        )
-
     return FirmwareExportResult(
-        channel=channel,
-        source_c=appconfig_c,
-        appconfig_h=appconfig_h,
-        hex_path=hex_path,
-        bix_path=bix,
-        match_summary=match_summary(match),
+        channel=channel, source_c=out / "appconfig.c", appconfig_h=out / "appconfig.h",
+        hex_path=result.hex_path, bix_path=result.bix_path, match_summary=match_summary(match),
     )
 
 
 def export_channels(
-    match: MatchCandidate,
-    channels: list[HostChannel],
-    **kwargs,
+    match: MatchCandidate, channels: list[HostChannel], **kwargs,
 ) -> list[FirmwareExportResult]:
-    return [build_firmware(match, channel=ch, **kwargs) for ch in channels]
+    return [build_firmware(match, channel=channel, **kwargs) for channel in channels]

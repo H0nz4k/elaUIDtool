@@ -6,6 +6,31 @@ a verzování používá [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-07
+
+### Added
+
+- Režim **Registrace HF/LF**: jedno přiložení, automatická detekce HF+LF / jen HF / jen LF a výstup HF před LF.
+- Nezávislá volba celého UID v HEX nebo DEC pro každé pásmo; bez doplnění na 16 znaků a bez zkracování.
+- Export registračního firmware D2R0.15 pro **TWN4 MULTITECH 2 USB** a **TWN4 MULTITECH 3 M LF HF**, s fotografiemi obou modelů a uložením BIX.
+- Test jedné karty bez databáze: skutečné sériové rámce, pořadí a zavření/znovuotevření COM jako v Jídelně, možnost test zastavit.
+- CLI `export-registration-fw`, `test-registration`, volba modelu v původním `export-fw`.
+- Testy registrace, všech kombinací formátů, SDK adaptéru a volitelně skutečných BIX; automatické kontroly a Windows GUI artifact v GitHub Actions.
+
+### Changed
+
+- Sestavení obou režimů přijímá původní Developer Pack 5.20; Multi CDC základ se rozbalí na tři nezměněné systémové obrazy.
+- BIX se zveřejní až po úspěšném sestavení a ověření systémových obrazů, s názvem modelu/formátů a JSON konfigurací + SHA-256.
+- Fotografie i zdroje registračního firmware jsou zahrnuté v Python balíčku / Windows EXE. Nastavení modelu a formátů se ukládá.
+- Volitelný `gui/app.py --browser` pro kontrolu rozhraní; výchozí spuštění zůstává nativní Windows okno.
+
+### Fixed
+
+- Převodní firmware testuje skutečný kód typu tagu, nikoli bitovou masku aplikovanou na jeho číselný typ.
+- Dialogy složky a uložení používají pojmenované konstanty pywebview, kompatibilní s aktuální verzí.
+- Přepínání záložek synchronizuje počáteční skrytí s viditelností prvků.
+
+
 ## [0.4.1] - 2026-09-02
 
 ### Added

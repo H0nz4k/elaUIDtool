@@ -20,3 +20,6 @@ version = {attr = "elatec_uid_tool.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+elatec_uid_tool = ["fw_templates/registration/*.c", "fw_templates/registration/*.h"]

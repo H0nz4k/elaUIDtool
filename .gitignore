@@ -22,6 +22,8 @@ dist/
 
 # GUI user settings (local DevPack path)
 /gui/user_settings.json
+/user_settings.json
+/FW_elatec/export/registration/
 
 # Local ELATEC Developer Pack (proprietary, do not commit)
 /files520/

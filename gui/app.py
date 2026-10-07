@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import argparse
 from collections import deque
 from datetime import datetime
 import multiprocessing
@@ -26,6 +27,8 @@ if SRC.exists() and str(SRC) not in sys.path:
 
 from elatec_uid_tool import __version__  # noqa: E402
 from elatec_uid_tool.protocol import ElatecError  # noqa: E402
+from firmware_ui import choose_reader, show_bix_result  # noqa: E402
+from registration_tab import build_registration_tab  # noqa: E402
 
 from services import (  # noqa: E402
     CaptureResult,
@@ -63,6 +66,7 @@ state = State()
 TABS = [
     ("compare", "compare_arrows", "Porovnání"),
     ("capture", "contactless", "Načtení karty"),
+    ("registration", "badge", "Registrace HF/LF"),
     ("reader", "usb", "Čtečka"),
     ("settings", "settings", "Nastavení"),
 ]
@@ -132,8 +136,9 @@ def encoding_badge(enc: str | None) -> str:
     return "plain"
 
 
-async def refresh_ports(sel: ui.select) -> None:
-    log_add("Obnovuji porty…")
+async def refresh_ports(sel: ui.select, *, quiet: bool = False) -> None:
+    if not quiet:
+        log_add("Obnovuji porty…")
     try:
         entries, rec = await run_io(list_ports)
     except ElatecError as exc:
@@ -142,14 +147,16 @@ async def refresh_ports(sel: ui.select) -> None:
     if not entries:
         sel.options = {}
         sel.value = None
-        notify_err("Žádný sériový port nenalezen.")
+        if not quiet:
+            notify_err("Žádný sériový port nenalezen.")
         return
     sel.options = {
         e.device: port_label(e.device, e.description, e.is_probable_elatec)
         for e in entries
     }
     sel.value = entries[rec].device if rec is not None else entries[0].device
-    log_add(f"Porty: {list(sel.options.keys())}")
+    if not quiet:
+        log_add(f"Porty: {list(sel.options.keys())}")
 
 
 def best_match_card(m: dict, *, tag_type: int | None = None) -> None:
@@ -188,17 +195,21 @@ def best_match_card(m: dict, *, tag_type: int | None = None) -> None:
         ui.separator().classes("my-3")
         ui.label("Firmware pro čtečku").classes(SEC)
         ui.label(
-            "Sestaví .bix stejným způsobem jako Jarov "
-            "(STD207 + appconfig + CCx/MCx/NCx). Cestu k DevPacku nastavíte v Nastavení."
+            "Vyber model čtečky a sestav .bix pro nalezené převodní pravidlo. "
+            "Cestu k DevPacku 5.20 nastavíš v Nastavení."
         ).classes("text-caption text-grey-7 mb-2")
 
         async def make_fw(channel: str, match=m, tt=tag_type) -> None:
+            model = await choose_reader()
+            if model is None:
+                return
             try:
                 path = await run_io(
-                    export_firmware_bix, match, channel, tag_type=tt
+                    export_firmware_bix, match, channel, tag_type=tt, reader_model=model
                 )
                 notify_ok(f"FW hotovo ({channel.upper()}): {path.name}")
                 log_add(f"BIX → {path}")
+                await show_bix_result(path)
             except Exception as exc:
                 notify_err(str(exc))
 
@@ -452,7 +463,7 @@ def build_reader_tab() -> None:
             load_btn.enable()
 
     load_btn.on("click", do_load)
-    ui.timer(0.4, lambda: refresh_ports(port_sel), once=True)
+    ui.timer(0.4, lambda: refresh_ports(port_sel, quiet=True), once=True)
 
 
 def _render_reader_result(d: dict) -> None:
@@ -658,7 +669,7 @@ def build_capture_tab() -> None:
             on_click=do_capture,
         ).props("color=primary unelevated")
 
-    ui.timer(0.4, lambda: refresh_ports(port_sel), once=True)
+    ui.timer(0.4, lambda: refresh_ports(port_sel, quiet=True), once=True)
 
 
 # ── Záložka: Nastavení ────────────────────────────────────────────────────────
@@ -668,9 +679,8 @@ def build_settings_tab() -> None:
         ui.label("TWN4 Developer Pack").classes(SEC)
         ui.separator().classes("my-1")
         ui.label(
-            "Výchozí je TWN4DevPack520 (složka elafiles/ nebo instalace DevPacku). "
-            "Pro novější DevPackxxx změň cestu níže – musí obsahovat Tools/ a Apps/ "
-            "s CCx/MCx/NCx a App_STD207_Standard_temp.c."
+            "Použij TWN4DevPack520 (5.20): složku obsahující Tools/, Apps/ a Firmware/. "
+            "Podporovaný je původní balík ELATEC i připravené CCx/MCx/NCx obrazy."
         ).classes("text-body2 text-grey-8")
 
     path_in = ui.input(
@@ -702,7 +712,8 @@ def build_settings_tab() -> None:
             if window is None:
                 notify_err("Okno není připravené – cestu zadej ručně.")
                 return
-            files = await window.create_file_dialog(dialog_type=2)
+            from webview import FileDialog
+            files = await window.create_file_dialog(dialog_type=FileDialog.FOLDER)
         except Exception as exc:
             notify_err(
                 "Výběr složky selhal – cestu zadej ručně do pole.\n"
@@ -901,6 +912,13 @@ def main_page() -> None:
 
             with ui.column().classes(
                 "w-full max-w-3xl mx-auto gap-3 hidden"
+            ) as p_registration:
+                build_registration_tab(refresh_ports=refresh_ports, run_io=run_io, log_add=log_add,
+                                       notify_ok=notify_ok, notify_err=notify_err)
+            tab_panels["registration"] = p_registration
+
+            with ui.column().classes(
+                "w-full max-w-3xl mx-auto gap-3 hidden"
             ) as p_reader:
                 build_reader_tab()
             tab_panels["reader"] = p_reader
@@ -910,6 +928,9 @@ def main_page() -> None:
             ) as p_settings:
                 build_settings_tab()
             tab_panels["settings"] = p_settings
+
+        # Synchronize visibility state as well as the initial CSS classes.
+        switch_tab(DEFAULT_TAB)
 
         with ui.column().classes(
             "w-full shrink-0 border-t border-grey-8 bg-grey-10"
@@ -965,6 +986,10 @@ def _icon_path() -> Path:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="elaUIDtool desktop")
+    parser.add_argument("--browser", action="store_true", help="Otevřít rozhraní v prohlížeči")
+    parser.add_argument("--port", type=int, default=None, help="HTTP port při ověřování GUI")
+    args = parser.parse_args()
     # Native args musí být nastaveny PŘED freeze_support (PyInstaller subprocess).
     icon = _icon_path()
     app.native.window_args.update(
@@ -980,10 +1005,11 @@ def main() -> None:
         title=f"UID Tool v{__version__} · HanzG",
         favicon=str(icon) if icon.is_file() else "📡",
         reload=False,
-        native=True,
-        window_size=(1100, 780),
-        show=False,
-        port=native.find_open_port(),
+        native=not args.browser,
+        window_size=None if args.browser else (1100, 780),
+        show=args.browser,
+        host="127.0.0.1",
+        port=args.port or native.find_open_port(),
         storage_secret="uid-tool-gui",
     )
 
