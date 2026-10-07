@@ -24,6 +24,7 @@ dist/
 /gui/user_settings.json
 /user_settings.json
 /FW_elatec/export/registration/
+/FW_elatec/export/builder/
 
 # Local ELATEC Developer Pack (proprietary, do not commit)
 /files520/

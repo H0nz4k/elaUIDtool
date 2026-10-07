@@ -21,8 +21,10 @@ použít `python gui/app.py --browser`.
 2. **Načtení karty** – COM + Simple Protocol.
 3. **Registrace HF/LF** – jeden nebo dva čipy při jednom přiložení, samostatné HEX/DEC,
    výběr modelu podle fotografie, sestavení registračního BIX a krátký test jedné karty.
-4. **Čtečka** – info o zařízení (PRS).
-5. **Nastavení** – cesta k `TWN4DevPack520` (5.20).
+4. **FW builder** – převzetí libovolné shody, samostatná pravidla HF/LF, předvolby a projekt JSON,
+   živý náhled, pípání/LED, rozhraní a export BIX se zdroji/manifestem.
+5. **Čtečka** – info o zařízení (PRS).
+6. **Nastavení** – cesta k `TWN4DevPack520` (5.20).
 
 ## DevPack
 
@@ -33,3 +35,7 @@ i původní `Apps/Samples/Standard/App_STD207_Standard.c` +
 
 Registrace nevyžaduje PRS; test využívá D2R0.15. Postup:
 [docs/REGISTRATION.md](../docs/REGISTRATION.md).
+
+Builder používá lokální SDK i pro klávesnicový systémový základ
+`Firmware/TWN4_xKx520_STD207_Multi_Keyboard_Standard.bix`.
+Podrobný postup a omezení: [docs/FW_BUILDER.md](../docs/FW_BUILDER.md).

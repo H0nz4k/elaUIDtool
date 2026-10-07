@@ -29,6 +29,7 @@ from elatec_uid_tool import __version__  # noqa: E402
 from elatec_uid_tool.protocol import ElatecError  # noqa: E402
 from firmware_ui import choose_reader, show_bix_result  # noqa: E402
 from registration_tab import build_registration_tab  # noqa: E402
+from builder_tab import build_builder_tab  # noqa: E402
 
 from services import (  # noqa: E402
     CaptureResult,
@@ -59,6 +60,7 @@ def log_add(text: str) -> None:
 class State:
     last_capture: CaptureResult | None = None
     last_offline: dict | None = None
+    fw_builder = None
 
 
 state = State()
@@ -67,6 +69,7 @@ TABS = [
     ("compare", "compare_arrows", "Porovnání"),
     ("capture", "contactless", "Načtení karty"),
     ("registration", "badge", "Registrace HF/LF"),
+    ("builder", "tune", "FW builder"),
     ("reader", "usb", "Čtečka"),
     ("settings", "settings", "Nastavení"),
 ]
@@ -159,7 +162,8 @@ async def refresh_ports(sel: ui.select, *, quiet: bool = False) -> None:
         log_add(f"Porty: {list(sel.options.keys())}")
 
 
-def best_match_card(m: dict, *, tag_type: int | None = None) -> None:
+def best_match_card(m: dict, *, tag_type: int | None = None, raw_hex: str | None = None,
+                    bit_count: int | None = None) -> None:
     with ui.card().classes(f"{CARD} border-primary/30 bg-blue-50"):
         with ui.row().classes("items-center gap-2 mb-2"):
             ui.icon("check_circle", size="xs").classes("text-positive")
@@ -214,6 +218,10 @@ def best_match_card(m: dict, *, tag_type: int | None = None) -> None:
                 notify_err(str(exc))
 
         with ui.row().classes("gap-2 flex-wrap"):
+            ui.button(
+                "Upravit ve FW builderu", icon="tune",
+                on_click=lambda: state.fw_builder.use_match(m, tag_type, raw_hex, bit_count),
+            ).props("color=primary")
             ui.button(
                 "Vytvořit FW (CDC)",
                 icon="usb",
@@ -329,13 +337,23 @@ def build_compare_tab() -> None:
         def all_table_content() -> None:
             if not all_state["matches"]:
                 return
-            ui.table(
+            table = ui.table(
                 columns=_CAND_COLS,
                 rows=_candidates_rows(all_state["matches"]),
                 row_key="n",
+                selection="single",
             ).props("dense flat bordered virtual-scroll").classes("w-full").style(
-                "height: calc(100vh - 80px);"
+                "height: calc(100vh - 160px);"
             )
+            def use_selected():
+                if not table.selected:
+                    notify_err("Vyber kandidáta v tabulce.")
+                    return
+                index = int(table.selected[0]["n"]) - 1
+                context = all_state["context"]
+                all_dlg.close()
+                state.fw_builder.use_match(all_state["matches"][index], *context)
+            ui.button("Upravit vybraný ve FW builderu", icon="tune", on_click=use_selected).classes("mt-2")
 
         with ui.element("div").classes("w-full flex-grow overflow-hidden px-4"):
             all_table_content()
@@ -364,6 +382,7 @@ def build_compare_tab() -> None:
             d = await run_io(run_offline_analysis, raw, bits, exp, fmt_sel.value)
             state.last_offline = d
             matches = d["matches"]
+            all_state["context"] = (tag_type, d["raw_hex"], d["bit_count"])
             log_add(f"← {len(matches)} kandidátů")
 
             with result_area:
@@ -377,7 +396,7 @@ def build_compare_tab() -> None:
                         ]
                     )
                 if matches:
-                    best_match_card(matches[0], tag_type=tag_type)
+                    best_match_card(matches[0], tag_type=tag_type, raw_hex=d["raw_hex"], bit_count=d["bit_count"])
                     if len(matches) > 1:
                         ui.button(
                             f"Zobrazit všechny ({len(matches)})",
@@ -544,13 +563,23 @@ def build_capture_tab() -> None:
         def cand_table_content() -> None:
             if not cand_state["matches"]:
                 return
-            ui.table(
+            table = ui.table(
                 columns=_CAND_COLS,
                 rows=_candidates_rows(cand_state["matches"]),
                 row_key="n",
+                selection="single",
             ).props("dense flat bordered virtual-scroll").classes("w-full").style(
-                "height: calc(100vh - 80px);"
+                "height: calc(100vh - 160px);"
             )
+            def use_selected():
+                if not table.selected:
+                    notify_err("Vyber kandidáta v tabulce.")
+                    return
+                index = int(table.selected[0]["n"]) - 1
+                context = cand_state["context"]
+                cand_dlg.close()
+                state.fw_builder.use_match(cand_state["matches"][index], *context)
+            ui.button("Upravit vybraný ve FW builderu", icon="tune", on_click=use_selected).classes("mt-2")
 
         with ui.element("div").classes("w-full flex-grow overflow-hidden px-4"):
             cand_table_content()
@@ -591,6 +620,7 @@ def build_capture_tab() -> None:
             state.last_capture = result
             d = capture_result_to_dict(result)
             matches = d["matches"]
+            cand_state["context"] = (parse_tag_type(d["card"].get("tag_type")), d["card"]["raw_id_hex"], d["card"]["raw_bit_count"])
             log_add(f"← {len(matches)} kandidátů")
             status_lbl.text = ""
 
@@ -613,6 +643,7 @@ def build_capture_tab() -> None:
                     best_match_card(
                         matches[0],
                         tag_type=parse_tag_type(d["card"].get("tag_type")),
+                        raw_hex=d["card"]["raw_id_hex"], bit_count=d["card"]["raw_bit_count"],
                     )
 
                     with ui.row().classes("gap-2 flex-wrap"):
@@ -916,6 +947,13 @@ def main_page() -> None:
                 build_registration_tab(refresh_ports=refresh_ports, run_io=run_io, log_add=log_add,
                                        notify_ok=notify_ok, notify_err=notify_err)
             tab_panels["registration"] = p_registration
+
+            with ui.column().classes(
+                "w-full max-w-5xl mx-auto gap-3 hidden"
+            ) as p_builder:
+                state.fw_builder = build_builder_tab(run_io=run_io, notify_ok=notify_ok, notify_err=notify_err,
+                                                     log_add=log_add, switch_tab=switch_tab)
+            tab_panels["builder"] = p_builder
 
             with ui.column().classes(
                 "w-full max-w-3xl mx-auto gap-3 hidden"

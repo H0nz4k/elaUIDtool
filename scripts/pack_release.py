@@ -75,6 +75,8 @@ def current_version() -> str:
 
 
 def should_skip(path: Path) -> bool:
+    if path.is_relative_to(ROOT / "FW_elatec" / "export"):
+        return True
     parts = set(path.parts)
     if parts & SKIP_DIR_NAMES:
         return True
@@ -156,6 +158,17 @@ ověř jednu kartu tlačítkem **Otestovat jednu kartu**; Jídelna musí být za
 
 Jeden tag se odešle jednou, dva tagy v pořadí HF → LF, bez přidaných nul.
 Podrobnosti: `docs/REGISTRATION.md`.
+
+## FW builder
+
+Z nalezené shody použij **Upravit ve FW builderu**, nebo otevři záložku
+**FW builder**. HF a LF mají vlastní konverzi, formát i manipulaci s daty.
+Nastav hlasitost, počet pípnutí/bliknutí, jejich délku, LED, čtení a výstup
+CDC, USB klávesnice nebo UART. Projekt a vlastní předvolby lze uložit do JSON.
+**Vytvořit BIX** připraví také projekt, manifest a ZIP zdrojů bez SDK.
+
+USB klávesnice potřebuje `Firmware/TWN4_xKx520_STD207_Multi_Keyboard_Standard.bix`.
+Podrobnosti a rozsah: `docs/FW_BUILDER.md`.
 
 ## 5. Nahrání FW
 

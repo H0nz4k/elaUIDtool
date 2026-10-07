@@ -9,7 +9,7 @@ from elatec_uid_tool.registration_client import RegistrationCancelled, capture_r
 class FakeReader:
     """Streams separate CR frames; persists the second output across COM reopen."""
     def __init__(self, hf="04112233", lf="0102030405", hf_format="HEX", lf_format="HEX", *,
-                 wrong_second=False, early=False, locked=False, extra=False, timeout=False, bad_exit=False):
+                 wrong_second=False, early=False, locked=False, extra=False, timeout=False, bad_exit=False, version="D2R0.15"):
         self.hf, self.lf = hf, lf
         self.hf_format, self.lf_format = hf_format, lf_format
         self.wrong_second, self.early, self.locked, self.extra, self.timeout = wrong_second, early, locked, extra, timeout
@@ -18,6 +18,7 @@ class FakeReader:
         self.commands = []
         self.connections = []
         self.empty_reads = 0
+        self.version = version
 
     def frame(self, value):
         self.pending.extend(value.encode("ascii") + b"\r")
@@ -49,10 +50,10 @@ class FakeReader:
                     if command == "!Q" and reader.bad_exit:
                         reader.pending.extend(b"\xff\r")
                         continue
-                    reader.frame(f"ACK {command[1]} D2R0.15")
+                    reader.frame(f"ACK {command[1]} {reader.version}")
                     if command == "!T":
                         # Reader may enter the test from an old LOCKED session.
-                        reader.frame("STATUS D2R0.15 stage=LOCKED")
+                        reader.frame(f"STATUS {reader.version} stage=LOCKED")
                         reader.frame(f"CONFIG HF={reader.hf_format} LF={reader.lf_format}")
                     elif command == "!G" and not reader.timeout:
                         if reader.locked:
@@ -60,7 +61,7 @@ class FakeReader:
                         else:
                             if reader.early:
                                 reader.frame(reader.hf or reader.lf)
-                            reader.frame(f"PAIR D2R0.15 HF={reader.hf or '-'} LF={reader.lf or '-'} tags={int(reader.hf is not None) + int(reader.lf is not None)}")
+                            reader.frame(f"PAIR {reader.version} HF={reader.hf or '-'} LF={reader.lf or '-'} tags={int(reader.hf is not None) + int(reader.lf is not None)}")
                             reader.frame(reader.hf or reader.lf)
                             reader.frame("BAD" if reader.wrong_second else (reader.lf if reader.hf and reader.lf else ""))
                             if reader.extra:
@@ -73,6 +74,13 @@ class FakeReader:
 
 
 class RegistrationClientTests(unittest.TestCase):
+    def test_builder_registration_is_compatible_with_existing_test(self):
+        reader = FakeReader(hf="049A3F81", lf="4328719365", lf_format="DEC", version="BLD0.60")
+        result = capture_registration("COM7", serial_factory=reader)
+        self.assertEqual(result.frames, ("049A3F81", "4328719365"))
+        self.assertEqual(result.firmware, "BLD0.60")
+        self.assertEqual(reader.commands, ["!T", "!N", "!G", "!P", "!Q"])
+
     def test_four_format_combinations_receive_real_frames(self):
         for hf_format, hf in (("HEX", "04112233"), ("DEC", "68231731")):
             for lf_format, lf in (("HEX", "0102030405"), ("DEC", "4328719365")):

@@ -104,7 +104,7 @@ def _format_block_structured(encoding: str) -> str:
                 return false;
             for (bit = 0; bit < 24; bit++)
             {
-                if (GetBitMSB(CardData, bit))
+                if (GetBitMSB(CardData, CardDataBitCnt - 24 + bit))
                     value24 |= (1u << (23 - bit));
             }
             facility = (value24 >> 16) & 0xFFu;
@@ -188,138 +188,78 @@ def _host_channel_setup(channel: HostChannel) -> tuple[str, str]:
 
 
 def _read_type1_parts(match: MatchCandidate) -> tuple[str, str]:
-    """Vrátí (statické helpery, tělo ReadType1)."""
+    """Apply all found bit transforms for BOTH plain and structured output."""
     radix = _radix(match)
     first_bit = 0 if match.is_all_bits else match.first_bit
     num_bits = match.number_of_bits
     rev_bit = _c_bool(match.reverse_bit_order)
     rev_byte = _c_bool(match.reverse_byte_order)
-    structured = match.encoding != "plain"
+    helpers = textwrap.dedent(
+        """\
+        static int GetBitMSB(const byte *bits, int bitIndex)
+        {
+            int byteIndex = bitIndex / 8;
+            int bitInByte = 7 - (bitIndex % 8);
+            return (bits[byteIndex] >> bitInByte) & 1;
+        }
 
-    helpers = ""
-    if structured:
-        helpers = textwrap.dedent(
-            """\
-            static int GetBitMSB(const byte *bits, int bitIndex)
-            {
-                int byteIndex = bitIndex / 8;
-                int bitInByte = 7 - (bitIndex % 8);
-                return (bits[byteIndex] >> bitInByte) & 1;
-            }
-
-            static void ReverseBitOrder(byte *Dest, const byte *Source, int BitCnt)
-            {
-                int i;
-                for (i = 0; i < ((BitCnt + 7) / 8); i++)
-                    Dest[i] = 0;
-                for (i = 0; i < BitCnt; i++)
-                    CopyBits(Dest, i, Source, BitCnt - 1 - i, 1);
-            }
-
-            static void ReverseByteOrder(byte *Buf, int BitCnt)
-            {
-                int bytes = BitCnt / 8;
-                int i;
-                byte tmp;
-                if (BitCnt % 8)
-                    return;
-                for (i = 0; i < bytes / 2; i++)
-                {
-                    tmp = Buf[i];
-                    Buf[i] = Buf[bytes - 1 - i];
-                    Buf[bytes - 1 - i] = tmp;
-                }
-            }
-
-            """
-        )
-        format_block = _format_block_structured(match.encoding)
-        body = textwrap.dedent(
-            f"""\
-            byte Work[40];
-            byte Temp[40];
-            byte CardData[40];
-            int CardDataBitCnt;
+        static void ReverseBitOrder(byte *Dest, const byte *Source, int BitCnt)
+        {
             int i;
-            int workBits = IDBitCnt;
+            for (i = 0; i < ((BitCnt + 7) / 8); i++)
+                Dest[i] = 0;
+            for (i = 0; i < BitCnt; i++)
+                CopyBits(Dest, i, Source, BitCnt - 1 - i, 1);
+        }
 
-            CardString[0] = 0;
-            if (IDBitCnt < 1 || IDBitCnt > (int)sizeof(Work) * 8)
-                return false;
-
-            for (i = 0; i < ((IDBitCnt + 7) / 8); i++)
-                Work[i] = ID[i];
-
-            if ({rev_bit})
-            {{
-                ReverseBitOrder(Temp, Work, workBits);
-                for (i = 0; i < ((workBits + 7) / 8); i++)
-                    Work[i] = Temp[i];
-            }}
-
-            if ({rev_byte})
-            {{
-                if (workBits % 8)
-                    return false;
-                ReverseByteOrder(Work, workBits);
-            }}
-
-            if ({first_bit} < 0 || {num_bits} < 1)
-                return false;
-            if ({first_bit} + {num_bits} > workBits)
-                return false;
-
-            for (i = 0; i < (int)sizeof(CardData); i++)
-                CardData[i] = 0;
-            CopyBits(CardData, 0, Work, {first_bit}, {num_bits});
-            CardDataBitCnt = {num_bits};
-
-            """
-        ) + format_block.rstrip()
-    elif radix == 16:
-        body = textwrap.dedent(
-            f"""\
-            byte CardData[40];
-            int CardDataBitCnt;
-            int minDigits;
-            int maxDigits;
-
-            CardString[0] = 0;
-            if (IDBitCnt < 1 || IDBitCnt > (int)sizeof(CardData) * 8)
-                return false;
-            CardDataBitCnt = MIN(IDBitCnt, (int)sizeof(CardData) * 8);
-            CopyBits(CardData, 0, ID, 0, CardDataBitCnt);
-            minDigits = ({num_bits} + 7) / 8 * 2;
-            maxDigits = minDigits;
-            if (maxDigits > MaxCardStringLen)
-                maxDigits = MaxCardStringLen;
-            if (minDigits > maxDigits)
-                minDigits = maxDigits;
-            {{
-                ConvertBinaryToString(CardData, 0, CardDataBitCnt, CardString, 16, minDigits, maxDigits);
-                return true;
-            }}
-            """
-        )
-    else:
-        body = textwrap.dedent(
-            """\
-            byte CardData[40];
-            int CardDataBitCnt;
-            int maxDigits;
-
-            CardString[0] = 0;
-            if (IDBitCnt < 1 || IDBitCnt > (int)sizeof(CardData) * 8)
-                return false;
-            CardDataBitCnt = MIN(IDBitCnt, (int)sizeof(CardData) * 8);
-            CopyBits(CardData, 0, ID, 0, CardDataBitCnt);
-            maxDigits = MaxCardStringLen;
+        static void ReverseByteOrder(byte *Buf, int BitCnt)
+        {
+            int bytes = BitCnt / 8;
+            int i;
+            byte tmp;
+            if (BitCnt % 8)
+                return;
+            for (i = 0; i < bytes / 2; i++)
             {
-                ConvertBinaryToString(CardData, 0, CardDataBitCnt, CardString, 10, 1, maxDigits);
-                return true;
+                tmp = Buf[i];
+                Buf[i] = Buf[bytes - 1 - i];
+                Buf[bytes - 1 - i] = tmp;
             }
-            """
-        )
+        }
+
+        """
+    )
+    if match.encoding != "plain":
+        format_block = _format_block_structured(match.encoding)
+    else:
+        digits = "(CardDataBitCnt + 3) / 4" if radix == 16 else "1"
+        format_block = f"""{{
+    int minDigits = {digits};
+    if (minDigits > MaxCardStringLen) return false;
+    ConvertBinaryToString(CardData, 0, CardDataBitCnt, CardString, {radix}, minDigits, MaxCardStringLen);
+    return true;
+}}"""
+    body = textwrap.dedent(f"""\
+    byte Work[40], Temp[40], CardData[40];
+    int CardDataBitCnt, i;
+    int workBits = IDBitCnt;
+    CardString[0] = 0;
+    if (IDBitCnt < 1 || IDBitCnt > (int)sizeof(Work) * 8) return false;
+    memset(Work, 0, sizeof(Work));
+    memcpy(Work, ID, (IDBitCnt + 7) / 8);
+    if ({rev_bit}) {{
+        ReverseBitOrder(Temp, Work, workBits);
+        memcpy(Work, Temp, (workBits + 7) / 8);
+    }}
+    if ({rev_byte}) {{
+        if (workBits % 8) return false;
+        ReverseByteOrder(Work, workBits);
+    }}
+    if ({first_bit} < 0 || {num_bits} < 1 || {first_bit} + {num_bits} > workBits) return false;
+    for (i = 0; i < (int)sizeof(CardData); i++) CardData[i] = 0;
+    CopyBits(CardData, 0, Work, {first_bit}, {num_bits});
+    CardDataBitCnt = {num_bits};
+    """) + format_block
     return helpers, body
 
 

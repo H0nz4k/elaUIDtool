@@ -78,7 +78,7 @@ class _Session:
         while True:
             line = self.line(deadline)
             self.inspect(line, errors=False)
-            match = re.fullmatch(rf"ACK {command} (D2R0\.\d+)", line)
+            match = re.fullmatch(rf"ACK {command} (D2R0\.\d+|BLD0\.60)", line)
             if match:
                 self.firmware = match.group(1)
                 return
@@ -89,7 +89,7 @@ class _Session:
 
 
 def _parse_pair(line: str, formats: tuple[str, str]) -> tuple[str | None, str | None]:
-    match = re.fullmatch(r"PAIR D2R0\.\d+ HF=([0-9A-F]+|-) LF=([0-9A-F]+|-) tags=([12])", line)
+    match = re.fullmatch(r"PAIR (?:D2R0\.\d+|BLD0\.60) HF=([0-9A-F]+|-) LF=([0-9A-F]+|-) tags=([12])", line)
     if not match:
         raise ElatecError("Neplatný souhrn HF/LF z firmware.")
     codes = tuple(None if value == "-" else value for value in match.groups()[:2])

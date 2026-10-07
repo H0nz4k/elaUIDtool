@@ -1,4 +1,4 @@
-# ELATEC UID Tool 0.5.0
+# ELATEC UID Tool 0.6.0
 
 Windows aplikace pro práci s identifikátory karet na čtečkách **ELATEC TWN4**.
 
@@ -8,10 +8,12 @@ Pomůže ti:
 3. **sestavit firmware** (`.bix`) pro čtečku,
 4. volitelně **načíst kartu** přes USB (Simple Protocol / PRS).
 5. **registrovat HF/LF kartu** jedním přiložením, s HEX/DEC zvlášť pro každé pásmo.
+6. **upravit a uložit celý firmware projekt** ve FW builderu, včetně pípání, LED a datových pravidel.
 
 Repozitář: [https://github.com/H0nz4k/elaUIDtool](https://github.com/H0nz4k/elaUIDtool)  
 Podrobný návod: [docs/NAVOD.md](docs/NAVOD.md)
 Registrace pro Jídelnu: [docs/REGISTRATION.md](docs/REGISTRATION.md)
+FW builder: [docs/FW_BUILDER.md](docs/FW_BUILDER.md)
 
 ---
 
@@ -25,6 +27,9 @@ Registrace pro Jídelnu: [docs/REGISTRATION.md](docs/REGISTRATION.md)
 | **Info o čtečce** | Verze FW, LF/HF masky, TagType |
 | **Registrace HF/LF** | Automaticky HF+LF / jen HF / jen LF, vlastní USB CDC firmware, test jedné karty bez DB |
 | **Modely čteček** | TWN4 MULTITECH 2 USB a TWN4 MULTITECH 3 M LF HF, fotografie při exportu BIX |
+| **FW builder** | Pravidla z libovolné nalezené shody, samostatná data HF/LF, živý náhled, HEX/DEC/BIN/OCT/ASCII, AND/XOR, délka a textový rámec |
+| **Signalizace** | Hlasitost, tón, počet a časování pípnutí/bliknutí, klidová LED; zvlášť startup, jeden čip, dvojice a chyba |
+| **Projekty/předvolby** | Vestavěné i vlastní předvolby, import/export JSON, BIX + zdroje + manifest; CDC, skutečná USB klávesnice, UART |
 | **Nastavení DevPacku** | Cesta k ověřenému `TWN4DevPack520` (5.20) |
 | **CLI** | Stejná logika z příkazové řádky |
 

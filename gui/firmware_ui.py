@@ -57,7 +57,7 @@ async def choose_reader(default: str = DEFAULT_READER_MODEL) -> str | None:
     return await dialog
 
 
-async def show_bix_result(path: Path) -> None:
+async def show_bix_result(path: Path, *, extra_files: dict[str, Path] | None = None) -> None:
     with ui.dialog() as dialog, ui.card().classes("w-full max-w-xl p-5"):
         ui.icon("check_circle", color="positive", size="md")
         ui.label("Firmware je sestavený").classes("text-lg font-bold")
@@ -65,24 +65,25 @@ async def show_bix_result(path: Path) -> None:
         ui.label(str(path.parent)).classes("text-xs text-grey-7 break-all")
         ui.label("V AppBlasteru: Program Firmware Image → Select Image → Program Image.").classes("text-sm")
 
-        async def save_as() -> None:
+        async def save_as(file: Path = path) -> None:
             window = app.native.main_window
             if window:
                 from webview import FileDialog
-                files = await window.create_file_dialog(dialog_type=FileDialog.SAVE, save_filename=path.name,
-                                                       file_types=("Firmware (*.bix)",))
+                files = await window.create_file_dialog(dialog_type=FileDialog.SAVE, save_filename=file.name)
                 if files:
                     import shutil
                     dest = Path(files[0])
-                    if dest.suffix.lower() != ".bix":
+                    if file.suffix == ".bix" and dest.suffix.lower() != ".bix":
                         dest = dest.with_suffix(".bix")
-                    if dest.resolve() != path.resolve():
-                        shutil.copy2(path, dest)
+                    if dest.resolve() != file.resolve():
+                        shutil.copy2(file, dest)
                     ui.notify(f"Uloženo: {dest}", type="positive")
             else:
-                ui.download.file(path)
+                ui.download.file(file)
 
         with ui.row().classes("w-full justify-end gap-2"):
-            ui.button("Uložit BIX jako…", icon="save_alt", on_click=save_as)
+            ui.button("Uložit BIX jako…", icon="save_alt", on_click=lambda: save_as(path))
+            for label, file in (extra_files or {}).items():
+                ui.button(label, icon="download", on_click=lambda _e, f=file: save_as(f)).props("outline")
             ui.button("Zavřít", on_click=dialog.close).props("flat")
     dialog.open()

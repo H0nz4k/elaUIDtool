@@ -6,6 +6,24 @@ a verzování používá [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-07
+
+### Added
+
+- FW builder pro UID konverze i registraci HF/LF, s převzetím nejlepší nebo vybrané nalezené shody.
+- Samostatná pravidla HF/LF: reverze bitů/bajtů, bitové okno, AND/XOR, Wiegand/PAC/H10301, HEX/DEC/BIN/OCT/ASCII, délka, prefix/suffix a oddělovač.
+- Konverzní a projektové předvolby, vlastní uložené profily, import/export JSON a živý náhled skutečných výstupních bajtů.
+- Signalizace startup/jeden čip/dvojice/chyba: hlasitost, frekvence, počty pípnutí/bliknutí, barva a časování LED.
+- CDC, USB klávesnice s pravými Keyboard OS obrazy, UART parametry, USB sériové číslo/wakeup, výběr technologií, odebrání a opakování.
+- Výstup BLD0.60 s upravitelným projektem, manifestem, SHA-256 a ZIP zdrojů bez SDK; CLI build-project/preview-project/project-from-match.
+- Přenosný C převodník do 256 bitů a test shody s náhledem/analyzátorem; reálné SDK buildy pro oba modely a rozhraní.
+
+### Fixed
+
+- Původní STD export aplikuje reverzi i vybrané bity také u plain HEX/DEC; strukturované payloady používají spodních 24 bitů jako analyzátor.
+- Zdrojový release balíček vylučuje všechny lokálně generované firmware projekty a buildy.
+
+
 ## [0.5.0] - 2026-10-07
 
 ### Added

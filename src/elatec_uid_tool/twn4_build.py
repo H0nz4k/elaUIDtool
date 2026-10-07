@@ -15,6 +15,7 @@ import tempfile
 from .bix_container import extract_system_images, parse, system_pairs, validate_multi
 
 BASE_NAME = "TWN4_xCx520_STD207_Multi_CDC_Standard.bix"
+KEYBOARD_BASE_NAME = "TWN4_xKx520_STD207_Multi_Keyboard_Standard.bix"
 FAMILY_NAMES = ("TWN4_CCx520.bix", "TWN4_MCx520.bix", "TWN4_NCx520.bix")
 
 
@@ -33,22 +34,26 @@ def resolve_std_template(pack: Path) -> Path:
     raise FileNotFoundError("Chybí Apps/App_STD207_Standard_temp.c nebo Apps/Samples/Standard/App_STD207_Standard.c")
 
 
-def resolve_inputs(pack: Path, base_bix: Path | None = None) -> list[Path]:
+def resolve_inputs(pack: Path, base_bix: Path | None = None, *, usb_type: str = "cdc") -> list[Path]:
+    if usb_type not in ("cdc", "keyboard"):
+        raise ValueError("Systémový USB typ musí být CDC nebo keyboard.")
     if base_bix is not None:
         if not base_bix.is_file():
             raise FileNotFoundError(f"Base BIX neexistuje: {base_bix}")
         return [base_bix.resolve()]
+    names = FAMILY_NAMES if usb_type == "cdc" else tuple(name.replace("Cx520", "Kx520") for name in FAMILY_NAMES)
     families = [next((d / name for d in (pack / "Apps", pack / "Firmware")
-                      if (d / name).is_file()), None) for name in FAMILY_NAMES]
+                      if (d / name).is_file()), None) for name in names]
     if all(families):
         return [path for path in families if path is not None]
-    base = pack / "Firmware" / BASE_NAME
+    base_name = BASE_NAME if usb_type == "cdc" else KEYBOARD_BASE_NAME
+    base = pack / "Firmware" / base_name
     if not base.is_file():
-        raise FileNotFoundError(f"Chybí Firmware/{BASE_NAME} nebo všechny tři rodiny Apps/TWN4_{{C,M,N}}Cx520.bix")
+        raise FileNotFoundError(f"Chybí Firmware/{base_name} nebo všechny tři rodiny {', '.join(names)}")
     return [base]
 
 
-def validate_devpack(pack: Path, *, standard: bool = True) -> list[str]:
+def validate_devpack(pack: Path, *, standard: bool = True, usb_type: str = "cdc") -> list[str]:
     required = ["Tools/makeapp.exe", "Tools/Yagarto-20110328/bin/arm-none-eabi-gcc.exe",
                 "Tools/Yagarto-20110328/bin/arm-none-eabi-objcopy.exe"]
     required += [f"Tools/sys/{name}" for name in
@@ -60,10 +65,11 @@ def validate_devpack(pack: Path, *, standard: bool = True) -> list[str]:
         except FileNotFoundError:
             missing.append("Apps/App_STD207_Standard_temp.c nebo Apps/Samples/Standard/App_STD207_Standard.c")
     try:
-        resolve_inputs(pack)
+        resolve_inputs(pack, usb_type=usb_type)
     except FileNotFoundError:
-        missing.extend(f"Apps/{name}" for name in FAMILY_NAMES if not (pack / "Apps" / name).is_file())
-        missing.append(f"nebo Firmware/{BASE_NAME}")
+        names = FAMILY_NAMES if usb_type == "cdc" else tuple(name.replace("Cx520", "Kx520") for name in FAMILY_NAMES)
+        missing.extend(f"Apps/{name}" for name in names if not (pack / "Apps" / name).is_file())
+        missing.append(f"nebo Firmware/{BASE_NAME if usb_type == 'cdc' else KEYBOARD_BASE_NAME}")
     return missing
 
 
@@ -88,6 +94,7 @@ def build_user_app(
     files: dict[str, str], sources: list[str], external_sources: tuple[Path, ...] = (),
     defines: tuple[str, ...] = (), options: ToolchainOptions | None = None,
     base_bix: Path | None = None, branch: str = "0520", metadata: dict | None = None,
+    usb_type: str = "cdc",
 ) -> AppBuildResult:
     options = options or ToolchainOptions()
     branch = branch.strip().lower().removeprefix("0x").zfill(4)
@@ -109,7 +116,7 @@ def build_user_app(
         make_command.insert(0, _executable(options.makeapp_runtime))
     elif os.name != "nt":
         raise ValueError("Na Linuxu zadej --gcc, --objcopy a --makeapp-runtime mono.")
-    inputs = resolve_inputs(pack, base_bix)
+    inputs = resolve_inputs(pack, base_bix, usb_type=usb_type)
     env = os.environ.copy()
     if os.name != "nt":
         env.setdefault("COMPUTERNAME", platform.node() or "elaUIDtool")
@@ -170,7 +177,7 @@ def build_user_app(
         resulting = system_pairs(parse(packed))
         if [(a.encoded, b.encoded) for a, b in original] != [(a.encoded, b.encoded) for a, b in resulting]:
             raise ValueError("Výstup změnil původní systémové obrazy; export byl odmítnut.")
-        manifest = {**(metadata or {}), "devpack": "5.20", "app": app_chars,
+        manifest = {**(metadata or {}), "devpack": "5.20", "usb_type": usb_type, "app": app_chars,
                     "app_version": f"0x{app_version:04X}", "firmware": bix.name,
                     "bytes": len(packed), "sha256": hashlib.sha256(packed).hexdigest(),
                     "base_images": [path.name for path in inputs],
